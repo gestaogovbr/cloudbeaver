@@ -48,7 +48,7 @@ jobs:
   #       if: ${{ needs.call-frontend-build.outputs.test-status == 'success' }}
   #       run: echo "Tests passed"
 
-  # call-docker-build-and-push:
-  #   name: Run
-  #   needs: [call-backend-build, call-frontend-build]
-  #   uses: ./.github/workflows/docker-build-and-push.yml
+  call-docker-build-and-push:
+    name: Run
+    needs: [build-server, build-frontend]
+    uses: ./.github/workflows/docker-build-and-push.yml
