@@ -68,9 +68,9 @@ jobs:
 
       - run: yarn test
 
-      # - name: Archive build artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: frontend-build-artifacts
-      #     path: webapp/packages/product-default/lib
-      #     if-no-files-found: error
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-artifacts
+          path: webapp/packages/product-default/lib
+          if-no-files-found: error
