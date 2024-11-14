@@ -30,6 +30,7 @@
         <module>postgresql</module>
         <module>sqlite</module>
         <module>sqlserver</module>
+        <module>teiid</module>
         <module>trino</module>
     </modules>
 
