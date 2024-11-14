@@ -24,11 +24,11 @@
         </dependency>
 
         <!-- Optional: PostgreSQL dependency for compatibility if needed -->
-        <dependency>
+        <!-- <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>42.2.20</version>
-        </dependency>
+        </dependency> -->
     </dependencies>
 
 </project>
