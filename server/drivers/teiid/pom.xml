@@ -20,7 +20,7 @@
             <groupId>org.teiid</groupId>
             <artifactId>teiid</artifactId>
             <classifier>jdbc</classifier>
-            <version>12.1.0</version>
+            <version>16.0.0</version>
         </dependency>
 
         <!-- Optional: PostgreSQL dependency for compatibility if needed -->
