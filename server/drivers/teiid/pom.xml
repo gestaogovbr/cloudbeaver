@@ -17,9 +17,9 @@
     <dependencies>
         <!-- Teiid JDBC Driver -->
         <dependency>
-            <groupId>org.teiid</groupId>
-            <artifactId>teiid-client</artifactId>
-            <version>16.0.0</version>
+            <groupId>org.teiid.teiid</groupId>
+            <artifactId>jdbc</artifactId>
+            <version>LATEST</version>
         </dependency>
 
         <!-- Optional: PostgreSQL dependency for compatibility if needed -->
