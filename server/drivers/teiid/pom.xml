@@ -19,7 +19,8 @@
         <dependency>
             <groupId>org.teiid</groupId>
             <artifactId>teiid</artifactId>
-            <version>16.0.0</version>
+            <version>LATEST</version>
+            <classifier>jdbc</classifier>
         </dependency>
 
         <!-- Optional: PostgreSQL dependency for compatibility if needed -->
