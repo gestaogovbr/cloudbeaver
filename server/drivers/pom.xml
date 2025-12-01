@@ -31,6 +31,7 @@
         <module>sqlite</module>
         <module>sqlserver</module>
         <module>teiid</module>
+        <module>impala</module>
         <module>trino</module>
     </modules>
 
