@@ -22,8 +22,8 @@ if [ -d dbeaver-common ]; then
     grep -E "dbeaver-version|p2-repo.url" root/pom.xml | head -5
     
     # Fix repository URL and version
-    sed -i 's|<dbeaver-version>.*</dbeaver-version>|<dbeaver-version>24.3.1</dbeaver-version>|g' root/pom.xml
-    sed -i 's|https://repo.dbeaver.net/p2/ce/.*|https://repo.dbeaver.net/p2/ce/24.3.1</repo.p2.dbeaver-ce.url>|g' root/pom.xml
+    sed -i 's|<dbeaver-version>.*</dbeaver-version>|<dbeaver-version>24.0.3</dbeaver-version>|g' root/pom.xml
+    sed -i 's|https://repo.dbeaver.net/p2/ce/.*|https://repo.dbeaver.net/p2/ce/24.0.3</repo.p2.dbeaver-ce.url>|g' root/pom.xml
     
     echo "=== AFTER FIX ==="
     grep -E "dbeaver-version|p2-repo.url" root/pom.xml | head -5
