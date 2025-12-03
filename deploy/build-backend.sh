@@ -14,22 +14,6 @@ echo "Pull dbeaver platform"
 [ ! -d dbeaver ] && git clone --depth 1 https://github.com/gestaogovbr/dbeaver.git
 [ ! -d dbeaver-common ] && git clone --depth 1 --branch devel https://github.com/dbeaver/dbeaver-common.git
 [ ! -d dbeaver-jdbc-libsql ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
-
-# Fix P2 repository URL and version
-if [ -d dbeaver-common ]; then
-    cd dbeaver-common
-    echo "=== BEFORE FIX ==="
-    grep -E "dbeaver-version|p2-repo.url" root/pom.xml | head -5
-    
-    # Fix repository URL and version
-    sed -i 's|<dbeaver-version>.*</dbeaver-version>|<dbeaver-version>24.0.3</dbeaver-version>|g' root/pom.xml
-    sed -i 's|https://repo.dbeaver.net/p2/ce/.*|https://repo.dbeaver.net/p2/ce/24.0.3</repo.p2.dbeaver-ce.url>|g' root/pom.xml
-    
-    echo "=== AFTER FIX ==="
-    grep -E "dbeaver-version|p2-repo.url" root/pom.xml | head -5
-    cd ..
-fi
-
 cd cloudbeaver/deploy
 echo "Build CloudBeaver server"
 cd ../server/product/aggregate
