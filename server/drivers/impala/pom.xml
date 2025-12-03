@@ -13,6 +13,12 @@
         <deps.output.dir>impala</deps.output.dir>
     </properties>
     <dependencies>
-        <!-- Cloudera Impala JDBC Driver will be added manually -->
+        <dependency>
+            <groupId>com.cloudera.impala</groupId>
+            <artifactId>ImpalaJDBC42</artifactId>
+            <version>2.5.41</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/ImpalaJDBC42.jar</systemPath>
+        </dependency>
     </dependencies>
 </project>
