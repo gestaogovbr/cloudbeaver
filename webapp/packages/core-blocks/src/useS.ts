@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,16 @@ export function useS<T extends ComponentStyle[]>(...componentStyles: [...T]): Ex
   const stylesRef = useRef<ComponentStyle[]>([]);
   const [patch, forceUpdate] = useState(0);
   const loadedStyles = useRef<BaseStyles[]>([]);
-  const themeService = useService(ThemeService, true);
+  let themeService: ThemeService | undefined;
+
+  try {
+    // this service not required, in some cases we don't have services initialized and need to show basic UI
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    themeService = useService(ThemeService);
+  } catch {
+    themeService = undefined;
+  }
+
   const [currentThemeId, setCurrentThemeId] = useState(() => themeService?.themeId);
   const lastThemeRef = useRef<string | undefined>(currentThemeId);
   const filteredStyles = themeService

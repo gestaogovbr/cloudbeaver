@@ -2,6 +2,8 @@
   "name": "@cloudbeaver/core-sdk",
   "type": "module",
   "sideEffects": [
+    "./lib/module.js",
+    "./lib/index.js",
     "src/**/*.css",
     "src/**/*.scss",
     "public/**/*"
@@ -9,27 +11,33 @@
   "version": "0.1.0",
   "description": "",
   "license": "Apache-2.0",
-  "main": "dist/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./module": "./lib/module.js"
+  },
   "scripts": {
     "clean": "rimraf node_modules",
     "build": "yarn run gql:gen && tsc -b",
     "gql:gen": "yarn run clean && graphql-codegen",
     "gql:gen:dev": "yarn run clean && graphql-codegen --watch",
     "lint": "eslint ./src/ --ext .ts,.tsx",
-    "test": "core-cli-test",
-    "validate-dependencies": "core-cli-validate-dependencies",
-    "update-ts-references": "yarn run clean && typescript-resolve-references"
+    "test": "dbeaver-test",
+    "validate-dependencies": "core-cli-validate-dependencies"
   },
   "dependencies": {
-    "@cloudbeaver/core-di": "^0",
-    "@cloudbeaver/core-executor": "^0",
-    "@cloudbeaver/core-utils": "^0",
+    "@cloudbeaver/core-di": "workspace:*",
+    "@cloudbeaver/core-utils": "workspace:*",
+    "@graphql-typed-document-node/core": "^3",
     "axios": "^1",
     "graphql": "^16",
-    "graphql-request": "^6",
-    "mobx": "^6"
+    "graphql-request": "^7",
+    "mobx": "^6",
+    "tslib": "^2"
   },
   "devDependencies": {
+    "@cloudbeaver/core-cli": "workspace:*",
+    "@cloudbeaver/tsconfig": "workspace:*",
+    "@dbeaver/cli": "workspace:*",
     "@graphql-codegen/add": "^5",
     "@graphql-codegen/cli": "^5",
     "@graphql-codegen/near-operation-file-preset": "^3",
@@ -40,7 +48,7 @@
     "@parcel/watcher": "^2",
     "graphql": "^16",
     "graphql-tag": "^2",
+    "rimraf": "^6",
     "typescript": "^5"
-  },
-  "peerDependencies": {}
+  }
 }

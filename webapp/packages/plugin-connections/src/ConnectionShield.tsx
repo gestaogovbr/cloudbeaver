@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -23,10 +23,11 @@ export const ConnectionShield = observer<PropsWithChildren<IConnectionShieldProp
   const notificationService = useService(NotificationService);
 
   const connection = useResource(ConnectionShield, ConnectionInfoResource, connectionKey);
-  const connecting = getComputed(() => connectionKey && connection.resource.isConnecting(connectionKey));
+  const connecting = getComputed(() => (connectionKey && connection.resource.isConnecting(connectionKey)) || connection.isLoading());
+  const isConnectionReady = getComputed(() => !connecting && connection.data?.connected && connection.isLoaded() && !connection.isOutdated());
 
   async function handleConnect() {
-    if (connecting || !connection.data || !connectionKey) {
+    if (isConnectionReady || !connection.data || !connectionKey) {
       return;
     }
 
@@ -37,14 +38,14 @@ export const ConnectionShield = observer<PropsWithChildren<IConnectionShieldProp
     }
   }
 
-  if (getComputed(() => connection.data && !connection.data.connected)) {
-    if (connecting) {
-      return <Loader message="ui_processing_connecting" />;
-    }
+  if (connecting) {
+    return <Loader message="ui_processing_connecting" />;
+  }
 
+  if (!isConnectionReady) {
     return (
       <TextPlaceholder>
-        <Button type="button" mod={['unelevated']} onClick={handleConnect}>
+        <Button type="button" onClick={handleConnect}>
           {translate('connections_connection_connect')}
         </Button>
       </TextPlaceholder>

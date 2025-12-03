@@ -1,19 +1,20 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { action, computed, observable } from 'mobx';
 
-import { type AdminUser, compareUsers, UsersResource, UsersResourceFilterKey, UsersResourceNewUsers } from '@cloudbeaver/core-authentication';
+import { type AdminUser, compareUsers, compareNewUsers, UsersResource, UsersResourceFilterKey } from '@cloudbeaver/core-authentication';
 import { ConfirmationDialogDelete, TableState, useObservableRef, useOffsetPagination, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { resourceKeyList } from '@cloudbeaver/core-resource';
-import { type ILoadableState, isArraysEqual, isDefined } from '@cloudbeaver/core-utils';
+import { type ILoadableState, isArraysEqual } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 
 import type { IUserFilters } from './Filters/useUsersTableFilters.js';
 
@@ -24,7 +25,7 @@ interface State {
   users: AdminUser[];
   loadableState: ILoadableState;
   loadMore(): void;
-  update: () => Promise<void>;
+  update: () => void;
   delete: () => Promise<void>;
 }
 
@@ -48,15 +49,19 @@ export function useUsersTable(filters: IUserFilters) {
         return pagination.hasNextPage;
       },
       get users() {
-        const users = Array.from(
-          new Set([
-            ...this.usersLoader.resource.get(UsersResourceFilterKey(searchFilter, enabledStateFilter)),
-            ...usersResource.get(pagination.allPages).filter(isDefined).sort(compareUsers),
-          ]),
+        return filters.filterUsers(
+          Array.from(
+            new Set([
+              ...this.usersLoader.resource.get(UsersResourceFilterKey(searchFilter, enabledStateFilter)),
+              ...usersResource.get(pagination.allPages),
+            ]),
+          )
+            .filter(isDefined)
+            .sort(compareUsers)
+            .sort(compareNewUsers),
         );
-        return filters.filterUsers(users.filter(isDefined));
       },
-      async update() {
+      update() {
         try {
           pagination.refresh();
           notificationService.logSuccess({ title: 'authentication_administration_tools_refresh_success' });
@@ -77,13 +82,13 @@ export function useUsersTable(filters: IUserFilters) {
         const userNames = deletionList.map(name => `"${name}"`).join(', ');
         const message = `${translate('authentication_administration_users_delete_confirmation')}${userNames}. ${translate('ui_are_you_sure')}`;
 
-        const result = await commonDialogService.open(ConfirmationDialogDelete, {
+        const { status } = await commonDialogService.open(ConfirmationDialogDelete, {
           title: 'ui_data_delete_confirmation',
           message,
           confirmActionText: 'ui_delete',
         });
 
-        if (result === DialogueStateResult.Rejected) {
+        if (status === DialogueStateResult.Rejected) {
           return;
         }
 

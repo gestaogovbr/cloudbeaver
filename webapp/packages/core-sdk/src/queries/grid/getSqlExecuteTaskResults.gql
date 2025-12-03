@@ -11,11 +11,13 @@ mutation getSqlExecuteTaskResults($taskId: ID!) {
       dataFormat
       resultSet {
         id
+        readOnly
         columns {
           dataKind
           entityName
           fullTypeName
           icon
+          description
           label
           maxLength
           name

@@ -1,10 +1,12 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
+import './module.js';
 export * from './ConnectionExecutionContext/ConnectionExecutionContext.js';
 export * from './ConnectionExecutionContext/ConnectionExecutionContextResource.js';
 export * from './ConnectionExecutionContext/ConnectionExecutionContextService.js';
@@ -18,16 +20,19 @@ export * from './extensions/IObjectSchemaProvider.js';
 export * from './extensions/IObjectSchemaSetter.js';
 export * from './extensions/IObjectLoaderProvider.js';
 export * from './extensions/IExecutionContextProvider.js';
-export * from './NavTree/ConnectionNavNodeService.js';
 export * from './NavTree/NavNodeExtensionsService.js';
 export * from './NavTree/getConnectionFolderIdFromNodeId.js';
 export * from './NavTree/getConnectionFolderId.js';
+export * from './NavTree/getFolderPathWithProjectId.js';
+export * from './NavTree/getFolderPath.js';
 export * from './NavTree/getConnectionParentId.js';
 export * from './NavTree/getFolderNodeParents.js';
 export * from './NavTree/NAV_NODE_TYPE_CONNECTION.js';
+export * from './NavTree/isConnectionNode.js';
 
 export * from './extensions/IConnectionProvider.js';
 export * from './extensions/IConnectionSetter.js';
+export * from './ConnectionFolderEventHandler.js';
 export * from './ConnectionsManagerService.js';
 export * from './ConnectionFolderResource.js';
 export * from './ConnectionDialectResource.js';
@@ -35,6 +40,11 @@ export * from './ConnectionInfoEventHandler.js';
 export * from './ConnectionInfoResource.js';
 export * from './ConnectionInfoOriginResource.js';
 export * from './ConnectionInfoOriginDetailsResource.js';
+export * from './ConnectionInfoAuthPropertiesResource.js';
+export * from './ConnectionInfoCustomOptionsResource.js';
+export * from './ConnectionInfoPropertiesResource.js';
+export * from './ConnectionInfoProviderPropertiesResource.js';
+export * from './ConnectionInfoNetworkHandlersResource.js';
 export * from './CONNECTIONS_SETTINGS_GROUP.js';
 export * from './EConnectionFeature.js';
 export * from './ConnectionsSettingsService.js';
@@ -52,5 +62,5 @@ export * from './NetworkHandlerResource.js';
 export * from './useConnectionInfo.js';
 export * from './useDBDriver.js';
 export * from './USER_NAME_PROPERTY_ID.js';
-
-export { manifest as coreConnectionsManifest } from './manifest.js';
+export * from './parseConnectionKey.js';
+export * from './DBDriverExpertSettingsResource.js';

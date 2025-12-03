@@ -1,26 +1,32 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { dataGridPlugin } from './manifest.js';
 
-export default dataGridPlugin;
-export { dataGridPlugin };
+import './module.js';
 
 export { DataGrid } from './DataGridLazy.js';
 
 export {
-  type CellSelectArgs,
-  type DataGridHandle,
-  type Position,
-  type Column,
-  type RenderHeaderCellProps,
-  type RenderEditCellProps,
-  type RenderCellProps,
-  type CalculatedColumn,
-  Cell,
-  type CellRendererProps,
-} from '@cloudbeaver/plugin-react-data-grid';
+  DataGridCellInnerContext,
+  useCreateGridReactiveValue,
+  BooleanFormatter,
+  DateFormatter,
+  NullFormatter,
+  NumberFormatter,
+  BlobFormatter,
+  type IGridReactiveValue,
+  type DataGridRef,
+  type ICellPosition,
+  type IDataGridRowRenderer,
+  type IDataGridCellRenderer,
+  type IDataGridCellProps,
+  type DataGridProps,
+} from '@dbeaver/react-data-grid';
+
+export { GrantManagementTable } from './GrantManagementTableLazy.js';
+
+export type { IGrantManagementTableColumn } from './GrantManagementTable.js';

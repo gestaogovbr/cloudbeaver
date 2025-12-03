@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,14 @@ public interface DBWConstants {
     String PERMISSION_CONFIGURATION_MANAGER = RMConstants.PERMISSION_CONFIGURATION_MANAGER;
     String PERMISSION_PRIVATE_PROJECT_ACCESS = "private-project-access";
     String PERMISSION_SECRET_MANAGER = "secret-manager";
+    String PERMISSION_SQL_RESULT_UPDATE = "sql-result-update";
+    String PERMISSION_SQL_EXECUTE_QUERY = "sql-execute-query";
 
+    String PERMISSION_FS_RESOURCE_EDIT = "fs-resource-edit";
+
+    String GLOBAL_PERMISSION_SCRIPT_EXECUTE = "permission.sql.script.execution";
+    String GLOBAL_PERMISSION_DATA_EDITOR_IMPORT = "permission.data-editor.import";
+    String GLOBAL_PERMISSION_DATA_EDITOR_EDITING = "permission.data-editor.editing";
 
     String PERMISSION_EDIT_STRUCTURE = "edit-meta";
     String PERMISSION_EDIT_DATA = "edit-data";
@@ -41,7 +48,7 @@ public interface DBWConstants {
         GLOBAL,
         EMBEDDED
     }
-
+    String TASK_STATUS_FINISHED = "Finished";
     //public static final String PERMISSION_USER = "user";
 
 }

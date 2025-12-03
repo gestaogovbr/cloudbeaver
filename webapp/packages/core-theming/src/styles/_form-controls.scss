@@ -47,6 +47,7 @@
 
   input,
   textarea {
+    --dbv-kit-input-placeholder-foreground: var(--theme-input-color-placeholder);
     box-sizing: border-box;
     padding: 7px 12px;
     width: 100%;
@@ -66,6 +67,16 @@
 
     &:user-invalid {
       @include mdc-theme-prop(border-color, negative, false);
+    }
+
+    &[type='color'] {
+      padding: 0;
+      &::-webkit-color-swatch-wrapper {
+        padding: 0;
+      }
+      &::-webkit-color-swatch {
+        border: none;
+      }
     }
 
     &:focus,

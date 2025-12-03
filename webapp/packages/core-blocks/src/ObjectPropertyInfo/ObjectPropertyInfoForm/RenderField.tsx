@@ -1,17 +1,24 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 
-import { getObjectPropertyType, getObjectPropertyValueType, type ObjectPropertyInfo, type ObjectPropertyType } from '@cloudbeaver/core-sdk';
-import { removeMetadataFromDataURL } from '@cloudbeaver/core-utils';
+import {
+  ConditionType,
+  getObjectPropertyDefaultValue,
+  getObjectPropertyType,
+  getObjectPropertyValue,
+  getObjectPropertyValueType,
+  type ObjectPropertyInfo,
+} from '@cloudbeaver/core-sdk';
+import { EMPTY_ARRAY, removeMetadataFromDataURL } from '@cloudbeaver/core-utils';
 
 import { FieldCheckbox } from '../../FormControls/Checkboxes/FieldCheckbox.js';
-import { Combobox } from '../../FormControls/Combobox.js';
+import { Select } from '../../FormControls/Select.js';
 import { FormFieldDescription } from '../../FormControls/FormFieldDescription.js';
 import { InputField } from '../../FormControls/InputField/InputField.js';
 import { InputFileTextContent } from '../../FormControls/InputFileTextContent.js';
@@ -19,15 +26,15 @@ import { isControlPresented } from '../../FormControls/isControlPresented.js';
 import { Textarea } from '../../FormControls/Textarea.js';
 import { Link } from '../../Link.js';
 import { useTranslate } from '../../localization/useTranslate.js';
-
-const RESERVED_KEYWORDS = ['no', 'off', 'new-password'];
+import { evaluate } from '../evaluate.js';
 
 interface RenderFieldProps {
   property: ObjectPropertyInfo;
   state?: Record<string, any>;
+  context?: Record<string, any>;
   defaultState?: Record<string, any>;
   editable?: boolean;
-  autofillToken?: string;
+  autocomplete?: string;
   disabled?: boolean;
   readOnly?: boolean;
   autoHide?: boolean;
@@ -38,44 +45,47 @@ interface RenderFieldProps {
   onFocus?: (event: React.FocusEvent<HTMLInputElement>) => void;
 }
 
-function getValue(value: any, controlType: ObjectPropertyType) {
-  const checkbox = controlType === 'checkbox';
-
-  if (value === null || value === undefined) {
-    return checkbox ? false : '';
-  }
-
-  if (typeof value === 'string') {
-    return checkbox ? value.toLowerCase() === 'true' : value;
-  }
-
-  return value.displayName || value.value || JSON.stringify(value);
-}
-
 export const RenderField = observer<RenderFieldProps>(function RenderField({
   property,
   state,
   defaultState,
+  context,
   editable = true,
-  autofillToken = '',
+  autocomplete = '',
   disabled,
-  readOnly,
   autoHide,
   showRememberTip,
   saved,
   className,
   canShowPassword,
   onFocus,
+  readOnly,
 }) {
   const translate = useTranslate();
+
+  let readonly = readOnly;
 
   const controlType = getObjectPropertyType(property);
   const type = getObjectPropertyValueType(property);
   const isPassword = type === 'password';
-  const required = property.required && !readOnly;
+  const evaluateContext = context ?? { ...defaultState, ...state };
 
-  const value = getValue(property.value, controlType);
-  const defaultValue = getValue(property.defaultValue, controlType);
+  for (const condition of property.conditions ?? EMPTY_ARRAY) {
+    const result = evaluate(condition.expression, evaluateContext);
+
+    if (condition.conditionType === ConditionType.Hide && result === true) {
+      return null;
+    }
+
+    if (condition.conditionType === ConditionType.ReadOnly && result === true) {
+      readonly = true;
+    }
+  }
+
+  const required = property.required && !readonly;
+  const value = getObjectPropertyValue(property);
+  const defaultValue = getObjectPropertyDefaultValue(property);
+  const hint = property.hint === property.displayName ? undefined : property.hint;
 
   if (controlType === 'link') {
     return (
@@ -108,7 +118,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
           state={state}
           defaultChecked={defaultValue}
           title={property.description}
-          disabled={disabled || readOnly}
+          disabled={disabled || readonly}
           className={className}
           groupGap
         >
@@ -123,7 +133,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
         checked={value}
         defaultChecked={defaultValue}
         title={property.description}
-        disabled={disabled || readOnly}
+        disabled={disabled || readonly}
         className={className}
         groupGap
       >
@@ -135,41 +145,43 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
   if (controlType === 'selector') {
     if (state !== undefined) {
       return (
-        <Combobox
+        <Select
           required={required}
           name={property.id!}
           state={state}
           items={property.validValues!}
           keySelector={value => value}
           valueSelector={value => value}
+          titleSelector={value => value}
           defaultValue={defaultValue}
           title={property.description}
           disabled={disabled}
-          readOnly={readOnly}
+          readOnly={readonly}
           description={property.hint}
           className={className}
         >
           {property.displayName ?? ''}
-        </Combobox>
+        </Select>
       );
     }
 
     return (
-      <Combobox
+      <Select
         required={required}
         name={property.id!}
         items={property.validValues!}
         keySelector={value => value}
         valueSelector={value => value}
+        titleSelector={value => value}
         defaultValue={defaultValue}
         title={property.description}
         disabled={disabled}
-        readOnly={readOnly}
-        description={property.hint}
+        readOnly={readonly}
+        description={hint}
         className={className}
       >
         {property.displayName ?? ''}
-      </Combobox>
+      </Select>
     );
   }
 
@@ -205,7 +217,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
           name={property.id!}
           state={state}
           disabled={disabled}
-          readOnly={readOnly}
+          readOnly={readonly}
           className={className}
         >
           {property.displayName ?? ''}
@@ -221,7 +233,7 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
         placeholder={passwordSavedMessage}
         name={property.id!}
         value={value}
-        readOnly={readOnly || disabled}
+        readOnly={readonly || disabled}
         className={className}
       >
         {property.displayName ?? ''}
@@ -240,10 +252,10 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
         state={state}
         defaultState={defaultState || { [property.id!]: defaultValue }}
         autoHide={autoHide}
-        description={property.hint}
+        description={hint}
         placeholder={passwordSavedMessage}
-        readOnly={readOnly || disabled}
-        autoComplete={RESERVED_KEYWORDS.includes(autofillToken) ? autofillToken : `${autofillToken} ${property.id}`}
+        readOnly={readonly || disabled}
+        autoComplete={autocomplete}
         className={className}
         canShowPassword={canShowPassword}
         onFocus={onFocus}
@@ -262,10 +274,10 @@ export const RenderField = observer<RenderFieldProps>(function RenderField({
       name={property.id!}
       value={value}
       defaultValue={defaultValue}
-      description={property.hint}
+      description={hint}
       placeholder={passwordSavedMessage}
-      readOnly={readOnly || disabled}
-      autoComplete={RESERVED_KEYWORDS.includes(autofillToken) ? autofillToken : `${autofillToken} ${property.id}`}
+      readOnly={readonly || disabled}
+      autoComplete={autocomplete}
       className={className}
       canShowPassword={canShowPassword}
       onFocus={onFocus}

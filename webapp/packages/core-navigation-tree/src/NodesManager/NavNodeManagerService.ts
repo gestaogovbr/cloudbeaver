@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@ export interface INodeNavigationContext {
   name?: string;
   icon?: string;
   canOpen: boolean;
+  features: string[];
 
   markOpen(): void;
   getParents: () => string[];
@@ -105,7 +106,7 @@ export interface INavNodeCache {
   canMove: boolean;
 }
 
-@injectable()
+@injectable(() => [NavTreeResource, NavNodeInfoResource, ProjectsNavNodeService, NavigationService])
 export class NavNodeManagerService extends Bootstrap {
   readonly onCanOpen: ISyncExecutor<INodeNavigationData>;
   readonly navigator: IExecutor<INodeNavigationData>;
@@ -192,6 +193,10 @@ export class NavNodeManagerService extends Bootstrap {
 
   async refreshTree(navNodeId: string): Promise<void> {
     await this.navTree.refreshTree(navNodeId);
+  }
+
+  async refreshNode(navNodeId: string): Promise<void> {
+    await this.navTree.refreshNode(navNodeId);
   }
 
   getTree(navNodeId: string): string[] | undefined;
@@ -324,12 +329,14 @@ export class NavNodeManagerService extends Bootstrap {
     let name: string | undefined;
     let icon: string | undefined;
     let canOpen = false;
+    let features: string[] | undefined;
 
     const node = this.getNode(nodeId);
     if (node) {
       name = node.name;
       icon = node.icon;
       projectId ||= node.projectId;
+      features = node.features;
 
       if (NodeManagerUtils.isDatabaseObject(nodeId)) {
         if (node.folder) {
@@ -381,6 +388,7 @@ export class NavNodeManagerService extends Bootstrap {
       folderId,
       name,
       icon,
+      features: features ?? [],
 
       markOpen,
       getParents,
@@ -388,11 +396,7 @@ export class NavNodeManagerService extends Bootstrap {
     };
   };
 
-  private async navigateHandler(
-    data: INodeNavigationData,
-    contexts: IExecutionContextProvider<INodeNavigationData>,
-    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
-  ): Promise<void> {}
+  private async navigateHandler(data: INodeNavigationData, contexts: IExecutionContextProvider<INodeNavigationData>): Promise<void> {}
 }
 
 export function parseNodeParentId(nodeId: string): string {

@@ -1,12 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
-  ['plugin_data_viewer_data_viewer_settings_group', 'Просмотр данных'],
+  ['plugin_data_viewer_data_viewer_settings_group', 'Редактор данных'],
   ['table_header_sql_expression', 'Введите SQL выражение чтобы отфильтровать результаты, например, column_name=10'],
   ['table_header_sql_expression_not_supported', 'Фильтрация данных недоступна'],
   ['data_viewer_tab_title', 'Данные'],
@@ -25,7 +18,7 @@ export default [
   ['data_viewer_action_auto_refresh_menu_stop_tooltip', 'Остановить автоматическое обновление данных'],
   ['data_viewer_action_auto_refresh_menu_configure_tooltip', 'Настроить параметры автоматического обновления'],
   ['data_viewer_action_auto_refresh_interval_tooltip', 'Установить интервал автоматического обновления в {arg:interval}'],
-  ['data_viewer_action_edit_delete', 'Удалить'],
+  ['data_viewer_action_edit_delete', 'Удалить выбранные строки'],
   ['data_viewer_action_edit_add', 'Добавить'],
   ['data_viewer_action_edit_add_copy', 'Дублировать'],
   ['data_viewer_action_edit_revert', 'Отменить'],
@@ -58,12 +51,6 @@ export default [
   ['data_viewer_copy_not_allowed', 'Копирование отключено'],
   ['data_viewer_copy_not_allowed_message', 'Если это не ожидаемо, обратитесь к администратору'],
   ['settings_data_editor', 'Редактор данных'],
-  ['settings_data_editor_disable_edit_name', 'Отключить редактирование'],
-  ['settings_data_editor_disable_edit_description', 'Отключить редактирование данных для пользователей без прав администратора'],
-  ['settings_data_editor_disable_data_copy_name', 'Отключить копирование'],
-  ['settings_data_editor_disable_data_copy_description', 'Отключить копирование данных для пользователей без прав администратора'],
-  ['settings_data_editor_disable_data_export_name', 'Отключить скачивание данных'],
-  ['settings_data_editor_disable_data_export_description', 'Отключить скачивание данных для пользователей без прав администратора'],
   ['settings_data_editor_fetch_max_name', 'Максимальный размер выборки'],
   ['settings_data_editor_fetch_max_description', 'Максимальное количество строк для выборки'],
   ['settings_data_editor_fetch_default_name', 'Размер выборки по умолчанию'],

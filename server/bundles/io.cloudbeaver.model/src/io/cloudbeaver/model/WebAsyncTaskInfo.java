@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,42 +16,40 @@
  */
 package io.cloudbeaver.model;
 
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.runtime.AbstractJob;
 
 /**
- * Web connection info
+ * Web async task info
  */
 public class WebAsyncTaskInfo {
 
-    private String id;
-    private String name;
-    private boolean running;
+    @NotNull
+    private final String id;
+    @NotNull
+    private final String name;
+    private boolean running = false;
     private Object result;
     private Object extendedResult;
     private String status;
     private Throwable jobError;
 
     private AbstractJob job;
+    private boolean cancelled = false;
 
-    public WebAsyncTaskInfo(String id, String name) {
+    public WebAsyncTaskInfo(@NotNull String id, @NotNull String name) {
         this.id = id;
         this.name = name;
     }
 
+    @NotNull
     public String getId() {
         return id;
     }
 
-    public void setId(String id) {
-        this.id = id;
-    }
-
+    @NotNull
     public String getName() {
         return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public boolean isRunning() {
@@ -110,5 +108,4 @@ public class WebAsyncTaskInfo {
     public void setJob(AbstractJob job) {
         this.job = job;
     }
-
 }

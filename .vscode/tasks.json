@@ -20,6 +20,26 @@
       "args": ["test"]
     },
     {
+      "label": "Run Tests Common Typescript",
+      "type": "shell",
+      "command": "yarn",
+      "group": "test",
+      "args": ["test"],
+      "options": {
+        "cwd": "${workspaceFolder}/webapp/common-typescript"
+      }
+    },
+    {
+      "label": "Run Tests Common React",
+      "type": "shell",
+      "command": "yarn",
+      "group": "test",
+      "args": ["test"],
+      "options": {
+        "cwd": "${workspaceFolder}/webapp/common-react"
+      }
+    },
+    {
       "label": "Run DevServer CE",
       "group": "build",
       "isBackground": true,
@@ -72,10 +92,10 @@
       "label": "Run Backend CE",
       "type": "shell",
       "windows": {
-        "command": "./run-server.bat"
+        "command": "./run-cloudbeaver-server.bat"
       },
       "osx": {
-        "command": "./run-server.sh"
+        "command": "./run-cloudbeaver-server.sh"
       },
       "options": {
         "cwd": "${workspaceFolder}/deploy/cloudbeaver"
@@ -93,20 +113,38 @@
       }
     },
     {
-      "label": "Update TS references CE",
+      "label": "Clean CE",
       "type": "shell",
-      "command": "yarn run update-ts-references",
+      "command": "yarn clear",
       "options": {
         "cwd": "${workspaceFolder}/webapp"
       }
     },
     {
-      "label": "Clean CE",
+      "label": "Add Custom Plugin",
       "type": "shell",
-      "command": "yarn clean",
+      "command": "yarn run add-plugin",
       "options": {
-        "cwd": "${workspaceFolder}/webapp"
+        "cwd": "${workspaceFolder}/webapp/packages"
       }
+    },
+    {
+      "label": "Run Ui Kit Preview",
+      "type": "shell",
+      "command": "yarn",
+      "options": {
+        "cwd": "${workspaceFolder}/webapp/common-react/@dbeaver/ui-kit"
+      },
+      "args": ["docs"]
+    },
+    {
+      "label": "Run Storybook",
+      "type": "shell",
+      "command": "yarn",
+      "options": {
+        "cwd": "${workspaceFolder}/webapp/packages/storybook"
+      },
+      "args": ["storybook"]
     }
   ],
   "inputs": [

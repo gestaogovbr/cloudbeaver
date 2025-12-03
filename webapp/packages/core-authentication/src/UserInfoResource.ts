@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,21 +11,12 @@ import { injectable } from '@cloudbeaver/core-di';
 import { AutoRunningTask, type ISyncExecutor, type ITask, SyncExecutor, whileTask } from '@cloudbeaver/core-executor';
 import { CachedDataResource, type ResourceKeySimple, ResourceKeyUtils } from '@cloudbeaver/core-resource';
 import { SessionResource } from '@cloudbeaver/core-root';
-import {
-  type AuthInfo,
-  type AuthLogoutQuery,
-  AuthStatus,
-  type GetActiveUserQueryVariables,
-  GraphQLService,
-  type UserInfo,
-} from '@cloudbeaver/core-sdk';
+import { type FederatedAuthInfo, type AuthInfo, type AuthLogoutQuery, AuthStatus, GraphQLService, type UserInfo } from '@cloudbeaver/core-sdk';
 
 import { AUTH_PROVIDER_LOCAL_ID } from './AUTH_PROVIDER_LOCAL_ID.js';
 import { AuthProviderService } from './AuthProviderService.js';
 import type { ELMRole } from './ELMRole.js';
 import type { IAuthCredentials } from './IAuthCredentials.js';
-
-export type UserInfoIncludes = GetActiveUserQueryVariables;
 
 export type UserLogoutInfo = AuthLogoutQuery['result'];
 
@@ -36,10 +27,13 @@ export interface ILoginOptions {
   forceSessionsLogout?: boolean;
 }
 
-export const ANONYMOUS_USER_ID = 'anonymous';
+export type IFederatedLoginOptions = Omit<ILoginOptions, 'credentials'>;
 
-@injectable()
-export class UserInfoResource extends CachedDataResource<UserInfo | null, void, UserInfoIncludes> {
+export const ANONYMOUS_USER_ID = 'anonymous';
+export const UNAUTHORIZED_ID = 'unauthorized';
+
+@injectable(() => [GraphQLService, AuthProviderService, SessionResource])
+export class UserInfoResource extends CachedDataResource<UserInfo | null, void> {
   readonly onUserChange: ISyncExecutor<string>;
   readonly onException: ISyncExecutor<Error>;
 
@@ -60,7 +54,7 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
     private readonly authProviderService: AuthProviderService,
     private readonly sessionResource: SessionResource,
   ) {
-    super(() => null, undefined, ['includeConfigurationParameters']);
+    super(() => null);
 
     this.onUserChange = new SyncExecutor();
     this.onException = new SyncExecutor();
@@ -93,7 +87,7 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
   }
 
   getId(): string {
-    return this.data?.userId || ANONYMOUS_USER_ID;
+    return this.data?.userId || UNAUTHORIZED_ID;
   }
 
   hasToken(providerId: string): boolean {
@@ -126,15 +120,27 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
     });
 
     if (authInfo.userTokens && authInfo.authStatus === AuthStatus.Success) {
-      this.resetIncludes();
-      this.setData(await this.loader());
-      this.sessionResource.markOutdated();
+      await this.syncData();
     }
 
     return authInfo as AuthInfo;
   }
 
-  finishFederatedAuthentication(authId: string, linkUser?: boolean): ITask<UserInfo | null> {
+  async requestFederatedLogin(
+    provider: string,
+    { configurationId, linkUser, forceSessionsLogout }: IFederatedLoginOptions,
+  ): Promise<FederatedAuthInfo> {
+    const { result } = await this.graphQLService.sdk.federatedLogin({
+      provider,
+      configuration: configurationId,
+      linkUser,
+      forceSessionsLogout,
+    });
+
+    return result;
+  }
+
+  autoLogin(authId: string, linkUser?: boolean): ITask<UserInfo | null> {
     let activeTask: ITask<AuthInfo> | undefined;
 
     return new AutoRunningTask<UserInfo | null>(
@@ -164,9 +170,7 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
         const authInfo = await activeTask;
 
         if (authInfo.userTokens && authInfo.authStatus === AuthStatus.Success) {
-          this.resetIncludes();
-          this.setData(await this.loader());
-          this.sessionResource.markOutdated();
+          await this.syncData();
         }
 
         return this.data;
@@ -183,9 +187,12 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
       configuration,
     });
 
-    this.resetIncludes();
-    this.setData(await this.loader());
-    this.sessionResource.markOutdated();
+    const data = await this.loader();
+    runInAction(() => {
+      this.resetIncludes();
+      this.setData(data);
+      this.sessionResource.markOutdated();
+    });
 
     return result;
   }
@@ -194,8 +201,6 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
     await this.performUpdate(undefined, [], async () => {
       const { user } = await this.graphQLService.sdk.updateUserPreferences({
         preferences,
-        ...this.getDefaultIncludes(),
-        ...this.getIncludesMap(),
       });
 
       this.setData(user as UserInfo | null);
@@ -269,12 +274,15 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
     return this.data?.configurationParameters[key];
   }
 
-  protected async loader(key: void, includes?: ReadonlyArray<string>): Promise<UserInfo | null> {
+  async syncData(): Promise<void> {
+    this.resetIncludes();
+    this.setData(await this.loader());
+    this.sessionResource.markOutdated();
+  }
+
+  protected async loader(key: void): Promise<UserInfo | null> {
     try {
-      const { user } = await this.graphQLService.sdk.getActiveUser({
-        ...this.getDefaultIncludes(),
-        ...this.getIncludesMap(key, includes),
-      });
+      const { user } = await this.graphQLService.sdk.getActiveUser({});
 
       return (user as UserInfo | null) || null;
     } catch (exception: any) {
@@ -294,11 +302,5 @@ export class UserInfoResource extends CachedDataResource<UserInfo | null, void, 
     if (prevUserId !== currentUserId) {
       this.onUserChange.execute(currentUserId);
     }
-  }
-
-  private getDefaultIncludes(): UserInfoIncludes {
-    return {
-      includeConfigurationParameters: false,
-    };
   }
 }

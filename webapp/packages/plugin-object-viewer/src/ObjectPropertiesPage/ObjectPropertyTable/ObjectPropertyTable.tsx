@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@ import { useEffect } from 'react';
 import { s, TextPlaceholder, useOffsetPagination, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { type DBObject, DBObjectParentKey, DBObjectResource, NavTreeResource } from '@cloudbeaver/core-navigation-tree';
-import { isDefined } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 import { NavNodeViewService } from '@cloudbeaver/plugin-navigation-tree';
 
 import styles from './ObjectPropertyTable.module.css';
@@ -38,15 +38,15 @@ export const ObjectPropertyTable = observer<ObjectPropertyTableProps>(function O
   const allData = dbObjectLoader.resource.get(pagination.allPages).filter(isDefined);
   const { nodes, duplicates } = navNodeViewService.filterDuplicates(allData.map(node => node?.id) || []);
 
-  const objects = allData.filter(node => nodes.includes(node.id)) as DBObject[];
+  const objects = allData.filter(node => nodes.has(node.id)) as DBObject[];
 
   useEffect(() => {
-    navNodeViewService.logDuplicates(objectId, duplicates);
+    navNodeViewService.logDuplicates(objectId, Array.from(duplicates));
   });
 
   return (
     <>
-      {nodes.length === 0 ? (
+      {nodes.size === 0 ? (
         <TextPlaceholder>{translate('plugin_object_viewer_table_no_items')}</TextPlaceholder>
       ) : (
         <div className={s(styles, { box: true }, className)}>

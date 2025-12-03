@@ -1,14 +1,14 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import type React from 'react';
+import { use } from 'react';
 
-import { App, useService } from '@cloudbeaver/core-di';
-import { clsx } from '@cloudbeaver/core-utils';
+import { AppContext } from '@cloudbeaver/core-di';
+import { clsx } from '@dbeaver/ui-kit';
 
 import style from './AppRefreshButton.module.css';
 
@@ -17,10 +17,14 @@ interface IProps {
 }
 
 export const AppRefreshButton: React.FC<IProps> = function AppRefreshButton({ className }) {
-  const app = useService(App);
+  const app = use(AppContext);
+
+  if (!app) {
+    return null;
+  }
 
   function refresh() {
-    app.restart();
+    app?.restart();
   }
 
   return (

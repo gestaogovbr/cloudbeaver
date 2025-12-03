@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,22 +20,22 @@ import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebServiceUtils;
 import io.cloudbeaver.auth.SMSignOutLinkProvider;
 import io.cloudbeaver.auth.provider.local.LocalAuthProvider;
+import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.WebPropertyInfo;
-import io.cloudbeaver.model.app.WebAppConfiguration;
+import io.cloudbeaver.model.app.ServletApplication;
 import io.cloudbeaver.model.session.WebAuthInfo;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.model.session.WebSessionAuthProcessor;
-import io.cloudbeaver.model.user.WebAuthProviderInfo;
 import io.cloudbeaver.model.user.WebUser;
 import io.cloudbeaver.registry.WebAuthProviderDescriptor;
 import io.cloudbeaver.registry.WebAuthProviderRegistry;
 import io.cloudbeaver.registry.WebMetaParametersRegistry;
 import io.cloudbeaver.server.CBApplication;
-import io.cloudbeaver.service.auth.DBWServiceAuth;
-import io.cloudbeaver.service.auth.WebAuthStatus;
-import io.cloudbeaver.service.auth.WebLogoutInfo;
-import io.cloudbeaver.service.auth.WebUserInfo;
+import io.cloudbeaver.service.auth.*;
+import io.cloudbeaver.service.auth.model.user.WebAuthProviderInfo;
 import io.cloudbeaver.service.security.SMUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
@@ -44,6 +44,7 @@ import org.jkiss.dbeaver.model.auth.SMAuthInfo;
 import org.jkiss.dbeaver.model.auth.SMAuthStatus;
 import org.jkiss.dbeaver.model.auth.SMSessionExternal;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyDescriptor;
+import org.jkiss.dbeaver.model.security.SMConstants;
 import org.jkiss.dbeaver.model.security.SMController;
 import org.jkiss.dbeaver.model.security.SMSubjectType;
 import org.jkiss.dbeaver.model.security.exception.SMTooManySessionsException;
@@ -61,7 +62,7 @@ import java.util.Map;
 public class WebServiceAuthImpl implements DBWServiceAuth {
 
     private static final Log log = Log.getLog(WebServiceAuthImpl.class);
-    public static final String CONFIG_TEMP_ADMIN_USER_ID = "temp_config_admin";
+    private static final long DEFAULT_TIMEOUT_MILLISECONDS = 5 * 60 * 1000;
 
     @Override
     public WebAuthStatus authLogin(
@@ -72,35 +73,11 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
         boolean linkWithActiveUser,
         boolean forceSessionsLogout
     ) throws DBWebException {
-        if (CommonUtils.isEmpty(providerId)) {
-            throw new DBWebException("Missing auth provider parameter");
-        }
-        WebAuthProviderDescriptor authProviderDescriptor = WebAuthProviderRegistry.getInstance()
-            .getAuthProvider(providerId);
-        if (authProviderDescriptor.isTrusted()) {
-            throw new DBWebException(authProviderDescriptor.getLabel() + " not allowed for authorization via GQL API");
-        }
-        if (authParameters == null) {
-            authParameters = Map.of();
-        }
-        SMController securityController = webSession.getSecurityController();
-        String currentSmSessionId = (webSession.getUser() == null || CBApplication.getInstance().isConfigurationMode())
-            ? null
-            : webSession.getUserContext().getSmSessionId();
-
         try {
-            var smAuthInfo = securityController.authenticate(
-                webSession.getSessionId(),
-                currentSmSessionId,
-                webSession.getSessionParameters(),
-                WebSession.CB_SESSION_TYPE,
-                providerId,
-                providerConfigurationId,
-                authParameters,
-                forceSessionsLogout
-            );
-
-            linkWithActiveUser = linkWithActiveUser && CBApplication.getInstance().getAppConfiguration().isLinkExternalCredentialsWithUser();
+            var smAuthInfo = initiateAuthentication(webSession, providerId, providerConfigurationId, authParameters, forceSessionsLogout);
+            //TODO deprecated, use asyncAuthLogin for federated auth, exits for backward compatibility
+            linkWithActiveUser = linkWithActiveUser && CBApplication.getInstance().getAppConfiguration()
+                .isLinkExternalCredentialsWithUser();
             if (smAuthInfo.getAuthStatus() == SMAuthStatus.IN_PROGRESS) {
                 //run async auth process
                 return new WebAuthStatus(smAuthInfo.getAuthAttemptId(), smAuthInfo.getRedirectUrl(), smAuthInfo.getAuthStatus());
@@ -114,7 +91,103 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
         } catch (Exception e) {
             throw new DBWebException("User authentication failed", e);
         }
+    }
 
+    @Override
+    public WebAsyncAuthStatus federatedLogin(
+        @NotNull HttpServletRequest httpRequest,
+        @NotNull WebSession webSession,
+        @NotNull String providerId,
+        @Nullable String providerConfigurationId,
+        boolean linkWithActiveUser,
+        boolean forceSessionsLogout
+    ) throws DBWebException {
+        WebAuthProviderDescriptor providerDescriptor = WebAuthProviderRegistry.getInstance().getAuthProvider(providerId);
+        if (providerDescriptor == null) {
+            throw new DBWebException("Provider '" + providerId + "' not found");
+        }
+        if (!providerDescriptor.isFederated()) {
+            throw new DBWebException("Provider '" + providerId + "' is not federated");
+        }
+        try {
+            Map<String, Object> authParameters = new HashMap<>();
+            authParameters.put(SMConstants.USER_ORIGIN, ServletAppUtils.getOriginFromRequest(httpRequest));
+
+            var smAuthInfo = initiateAuthentication(webSession, providerId, providerConfigurationId, authParameters, forceSessionsLogout);
+            if (smAuthInfo.getAuthStatus() != SMAuthStatus.IN_PROGRESS) {
+                throw new DBWebException("Unexpected auth status: " + smAuthInfo.getAuthStatus());
+            }
+            if (CommonUtils.isEmpty(smAuthInfo.getRedirectUrl())) {
+                throw new DBWebException("Missing redirect URL");
+            }
+            WebAsyncAuthJob job = new WebAsyncAuthJob(
+                providerId + " authentication job",
+                smAuthInfo.getAuthAttemptId(),
+                linkWithActiveUser
+            );
+            WebAsyncTaskInfo authTask = webSession.createAsyncTask(providerId + " authentication");
+            authTask.setRunning(true);
+            authTask.setJob(job);
+            new WebAsyncAuthTimeoutJob(webSession, authTask, job).schedule(DEFAULT_TIMEOUT_MILLISECONDS);
+            return new WebAsyncAuthStatus(smAuthInfo.getRedirectUrl(), authTask);
+        } catch (SMTooManySessionsException e) {
+            throw new DBWebException("User authentication failed", e.getErrorType(), e);
+        } catch (Exception e) {
+            throw new DBWebException("User authentication failed", e);
+        }
+    }
+
+    @Override
+    public WebAsyncAuthTaskResult federatedAuthTaskResult(@NotNull WebSession webSession, @NotNull String taskId) throws DBWebException {
+        WebAsyncTaskInfo taskInfo = webSession.asyncTaskStatus(taskId, true);
+        if (taskInfo == null) {
+            throw new DBWebException("Task '" + taskId + "' not found");
+        }
+        if (taskInfo.isRunning()) {
+            throw new DBWebException("Task '" + taskId + "' is running");
+        }
+        if (taskInfo.getJob() == null || !WebAsyncAuthJob.class.isAssignableFrom(taskInfo.getJob().getClass())) {
+            throw new DBWebException("Task '" + taskId + "' is not async auth task");
+        }
+        WebAsyncAuthJob job = (WebAsyncAuthJob) taskInfo.getJob();
+        List<WebAuthInfo> userTokens = job.getAuthResult();
+        if (CommonUtils.isEmpty(userTokens)) {
+            userTokens = List.of();
+        }
+        return new WebAsyncAuthTaskResult(userTokens);
+    }
+
+    private static SMAuthInfo initiateAuthentication(
+        @NotNull WebSession webSession,
+        @NotNull String providerId,
+        @Nullable String providerConfigurationId,
+        @Nullable Map<String, Object> authParameters,
+        boolean forceSessionsLogout
+    ) throws DBException {
+        if (CommonUtils.isEmpty(providerId)) {
+            throw new DBWebException("Missing auth provider parameter");
+        }
+        WebAuthProviderDescriptor authProviderDescriptor = WebAuthProviderRegistry.getInstance()
+            .getAuthProvider(providerId);
+        if (authProviderDescriptor.isTrusted()) {
+            throw new DBWebException(authProviderDescriptor.getLabel() + " not allowed for authorization via GQL API");
+        }
+
+        SMController securityController = webSession.getSecurityController();
+        String currentSmSessionId = (webSession.getUser() == null || CBApplication.getInstance().isConfigurationMode())
+            ? null
+            : webSession.getUserContext().getSmSessionId();
+        var smAuthInfo = securityController.authenticate(
+            webSession.getSessionId(),
+            currentSmSessionId,
+            webSession.getSessionParameters(),
+            WebSession.CB_SESSION_TYPE,
+            providerId,
+            providerConfigurationId,
+            authParameters,
+            forceSessionsLogout
+        );
+        return smAuthInfo;
     }
 
     @Override
@@ -146,6 +219,7 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
 
     @Override
     public WebLogoutInfo authLogout(
+        @NotNull HttpServletRequest httpRequest,
         @NotNull WebSession webSession,
         @Nullable String providerId,
         @Nullable String configurationId
@@ -155,8 +229,10 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
         }
         try {
             List<WebAuthInfo> removedInfos = webSession.removeAuthInfo(providerId);
-            List<String> logoutUrls = new ArrayList<>();
             var cbApp = CBApplication.getInstance();
+
+            List<String> logoutUrls = new ArrayList<>();
+            String origin = ServletAppUtils.getOriginFromRequest(httpRequest);
             for (WebAuthInfo removedInfo : removedInfos) {
                 if (removedInfo.getAuthProviderDescriptor()
                     .getInstance() instanceof SMSignOutLinkProvider provider
@@ -169,12 +245,15 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
                         continue;
                     }
                     String logoutUrl;
+
                     if (removedInfo.getAuthSession() instanceof SMSessionExternal externalSession) {
                         logoutUrl = provider.getUserSignOutLink(providerConfig,
-                            externalSession.getAuthParameters());
+                            externalSession.getAuthParameters(), origin
+                        );
                     } else {
                         logoutUrl = provider.getUserSignOutLink(providerConfig,
-                            Map.of());
+                            Map.of(), origin
+                        );
                     }
                     if (CommonUtils.isNotEmpty(logoutUrl)) {
                         logoutUrls.add(logoutUrl);
@@ -190,8 +269,8 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
     @Override
     public WebUserInfo activeUser(@NotNull WebSession webSession) throws DBWebException {
         if (webSession.getUser() == null) {
-            WebAppConfiguration appConfiguration = webSession.getApplication().getAppConfiguration();
-            if (!appConfiguration.isAnonymousAccessEnabled()) {
+            ServletApplication application = webSession.getApplication();
+            if (!application.getAppConfiguration().isAnonymousAccessEnabled() || !webSession.isAuthorizedInSecurityManager()) {
                 return null;
             }
             SMUser anonymous = new SMUser("anonymous", true, null);
@@ -222,9 +301,11 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
     }
 
     @Override
-    public WebAuthProviderInfo[] getAuthProviders() {
+    public WebAuthProviderInfo[] getAuthProviders(@NotNull HttpServletRequest request) throws DBWebException {
+        String origin = ServletAppUtils.getOriginFromRequest(request);
         return WebAuthProviderRegistry.getInstance().getAuthProviders()
-            .stream().map(WebAuthProviderInfo::new)
+            .stream()
+            .map(descriptor -> new WebAuthProviderInfo(descriptor, origin))
             .toArray(WebAuthProviderInfo[]::new);
     }
 
@@ -278,10 +359,6 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
     ) throws DBWebException {
         webSession.addInfoMessage("Set user parameter - " + name);
         try {
-            String serializedValue = value == null ? null : value.toString();
-            if (webSession.getUser() != null) {
-                webSession.getSecurityController().setCurrentUserParameter(name, serializedValue);
-            }
             var params = new HashMap<String, Object>();
             params.put(name, value);
             webSession.getUserContext().getPreferenceStore().updatePreferenceValues(params);
@@ -300,9 +377,6 @@ public class WebServiceAuthImpl implements DBWServiceAuth {
             throw new DBWebException("Preferences cannot be changed for anonymous user");
         }
         try {
-            if (webSession.getUser() != null) {
-                webSession.getSecurityController().setCurrentUserParameters(parameters);
-            }
             webSession.getUserContext().getPreferenceStore().updatePreferenceValues(parameters);
             return new WebUserInfo(webSession, webSession.getUser());
         } catch (DBException e) {

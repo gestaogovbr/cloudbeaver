@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,6 +11,7 @@ import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { SessionDataResource } from '@cloudbeaver/core-root';
 import { formValidationContext } from '@cloudbeaver/core-ui';
+import { getFirstException } from '@cloudbeaver/core-utils';
 
 import { ADMINISTRATION_SERVER_CONFIGURATION_ITEM } from './ServerConfiguration/ADMINISTRATION_SERVER_CONFIGURATION_ITEM.js';
 import { ServerConfigurationFormStateManager } from './ServerConfiguration/ServerConfigurationFormStateManager.js';
@@ -27,7 +28,16 @@ const ServerConfigurationPage = importLazyComponent(() =>
 const WelcomeDrawerItem = importLazyComponent(() => import('./Welcome/WelcomeDrawerItem.js').then(m => m.WelcomeDrawerItem));
 const WelcomePage = importLazyComponent(() => import('./Welcome/WelcomePage.js').then(m => m.WelcomePage));
 
-@injectable()
+export const WELCOME_WIZARD_PAGE_NAME = 'welcome';
+
+@injectable(() => [
+  AdministrationItemService,
+  ConfigurationWizardService,
+  ServerConfigurationFormStateManager,
+  CommonDialogService,
+  ServerConfigurationService,
+  SessionDataResource,
+])
 export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
   constructor(
     private readonly administrationItemService: AdministrationItemService,
@@ -42,7 +52,7 @@ export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
 
   override register(): void {
     this.administrationItemService.create({
-      name: 'welcome',
+      name: WELCOME_WIZARD_PAGE_NAME,
       type: AdministrationItemType.ConfigurationWizard,
       configurationWizardOptions: {
         description: 'administration_configuration_wizard_welcome_step_description',
@@ -71,8 +81,20 @@ export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
           return true;
         },
         onConfigurationFinish: async () => {
-          await this.serverConfigurationFormStateManager.formState?.save();
-          await this.sessionDataResource.refresh();
+          const state = this.serverConfigurationFormStateManager.formState;
+          if (state) {
+            const saved = await this.serverConfigurationFormStateManager.save();
+
+            if (!saved) {
+              const error = getFirstException(state.exception);
+
+              if (error) {
+                throw getFirstException(error);
+              }
+            }
+
+            await this.sessionDataResource.refresh();
+          }
         },
         onLoad: () => {
           this.serverConfigurationFormStateManager.create();
@@ -82,6 +104,14 @@ export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
       onLoad: () => {
         this.serverConfigurationFormStateManager.create();
       },
+      onDeActivate: (configurationWizard, administration, nextAdministrationItem) => {
+        // so onFinish can be called with all required data from the form during easy config mode
+        if (configurationWizard) {
+          return;
+        }
+
+        this.serverConfigurationFormStateManager.destroy();
+      },
       canDeActivate: async configurationWizard => {
         const state = this.serverConfigurationFormStateManager.formState;
 
@@ -90,12 +120,12 @@ export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
         }
 
         if (!configurationWizard && state?.isChanged) {
-          const result = await this.commonDialogService.open(ConfirmationDialog, {
+          const { status } = await this.commonDialogService.open(ConfirmationDialog, {
             title: 'ui_save_reminder',
             message: 'ui_are_you_sure',
           });
 
-          if (result === DialogueStateResult.Rejected) {
+          if (status === DialogueStateResult.Rejected) {
             return false;
           }
         }

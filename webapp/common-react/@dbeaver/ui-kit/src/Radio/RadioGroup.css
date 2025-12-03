@@ -1,0 +1,24 @@
+@layer base {
+  .dbv-kit-radio-group {
+    display: flex;
+    gap: calc(var(--dbv-kit-radio-gap) * 4);
+
+    &.dbv-kit-radio-group--vertical {
+      flex-direction: column;
+      gap: 0;
+    }
+  }
+
+  .dbv-kit-radio-group__label {
+    display: block;
+    color: var(--dbv-kit-select-label-foreground);
+    padding-inline-start: var(--dbv-kit-select-label-padding-inline);
+    margin-block-end: var(--tw-spacing);
+  }
+
+  .dbv-kit-radio-group__label--required::after {
+    content: '*';
+    color: var(--dbv-kit-color-control-required);
+    margin-inline-start: 0.125rem;
+  }
+}

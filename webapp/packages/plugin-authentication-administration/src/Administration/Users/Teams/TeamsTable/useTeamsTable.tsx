@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -69,13 +69,13 @@ export function useTeamsTable(): Readonly<State> {
         const message = `${translate('administration_teams_delete_confirmation')}${teamNames}.\n\n${translate(
           'administration_teams_delete_confirmation_users_note',
         )}.\n\n${translate('ui_are_you_sure')}`;
-        const result = await dialogService.open(ConfirmationDialogDelete, {
+        const { status } = await dialogService.open(ConfirmationDialogDelete, {
           title: 'ui_data_delete_confirmation',
           message,
           confirmActionText: 'ui_delete',
         });
 
-        if (result === DialogueStateResult.Rejected) {
+        if (status === DialogueStateResult.Rejected) {
           return;
         }
 
@@ -95,8 +95,9 @@ export function useTeamsTable(): Readonly<State> {
     {
       processing: observable.ref,
       teams: computed,
+      state: observable.ref,
     },
-    false,
+    { state: resource },
     ['update', 'delete'],
   );
 }

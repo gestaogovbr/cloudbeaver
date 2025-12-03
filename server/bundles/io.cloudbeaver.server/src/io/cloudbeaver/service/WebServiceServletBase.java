@@ -18,20 +18,21 @@ package io.cloudbeaver.service;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import io.cloudbeaver.model.app.WebApplication;
+import io.cloudbeaver.model.apilog.ApiCallInterceptor;
+import io.cloudbeaver.model.app.ServletApplication;
 import io.cloudbeaver.model.session.WebSession;
-import io.cloudbeaver.server.CBApplication;
-import io.cloudbeaver.server.CBPlatform;
-import org.jkiss.dbeaver.DBException;
-import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.model.data.json.JSONUtils;
-
+import io.cloudbeaver.server.WebAppUtils;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.data.json.JSONUtils;
+
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public abstract class WebServiceServletBase extends HttpServlet {
@@ -43,29 +44,40 @@ public abstract class WebServiceServletBase extends HttpServlet {
         .serializeNulls()
         .setPrettyPrinting()
         .create();
+    public static final String API_PROTOCOL = "REST";
 
-    private final WebApplication application;
+    private final ServletApplication application;
 
-    public WebServiceServletBase(WebApplication application) {
+    public WebServiceServletBase(ServletApplication application) {
         this.application = application;
     }
 
-    public WebApplication getApplication() {
+    public ServletApplication getApplication() {
         return application;
     }
 
     @Override
     protected final void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        WebSession webSession = CBPlatform.getInstance().getSessionManager().findWebSession(request);
+        WebSession webSession = WebAppUtils.getWebApplication().getSessionManager().findWebSession(request);
         if (webSession == null) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Web session not found");
             return;
         }
+
+        LocalDateTime startTime = LocalDateTime.now();
+        String errorMessage = null;
         try {
             processServiceRequest(webSession, request, response);
         } catch (Exception e) {
             log.error(e);
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Error processing request: " + e.getMessage());
+            errorMessage = e.getMessage();
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Error processing request: " + errorMessage);
+        } finally {
+            if (WebAppUtils.getWebApplication() instanceof ApiCallInterceptor apiCallInterceptor) {
+                apiCallInterceptor.onApiCallEvent(
+                    request, getVariables(request), request.getRequestURI(), null, startTime, errorMessage, API_PROTOCOL
+                );
+            }
         }
     }
 

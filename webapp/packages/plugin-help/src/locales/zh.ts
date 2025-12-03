@@ -1,12 +1,8 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['shortcuts_title', '快捷操作'],
+
+  ['plugin_help_welcome_docs_label', 'Documentation'],
+  ['plugin_help_welcome_docs_description', 'Learn how to use {arg:product}'],
 
   ['data_viewer_shortcut_start_inline_editing', '为所选单元格打开内联编辑器'],
   ['data_viewer_shortcut_add_new_row', '添加行'],
@@ -22,8 +18,8 @@ export default [
   ['sql_editor_shortcut_show_execution_plan', '显示执行计划'],
   ['sql_editor_shortcut_format', '格式化脚本'],
   ['sql_editor_shortcut_open_editor_in_new_tab', '在单独的浏览器标签下打开SQL编辑器'],
-  ['sql_editor_shortcut_undo', '撤销'],
-  ['sql_editor_shortcut_redo', '重做'],
+  ['sql_editor_shortcut_find', '查找'],
+  ['sql_editor_shortcut_comment_uncomment_selection', '注释/取消注释所选内容'],
 
   ['navigation_tree_shortcut_enable_filter', '启用过滤'],
 ];

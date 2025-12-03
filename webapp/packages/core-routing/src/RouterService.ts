@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ export interface RouterTransitionData {
   done: DoneFn;
 }
 
-@injectable()
+@injectable(() => [App])
 export class RouterService extends Bootstrap {
   get state(): RouterState {
     return this.currentState;
@@ -100,7 +100,6 @@ export class RouterService extends Bootstrap {
       const contexts = await this.transitionTask.execute({ fromState: toState, toState: fromState, done });
 
       if (ExecutorInterrupter.isInterrupted(contexts)) {
-        // eslint-disable-next-line prefer-promise-reject-errors
         return Promise.reject();
       }
 

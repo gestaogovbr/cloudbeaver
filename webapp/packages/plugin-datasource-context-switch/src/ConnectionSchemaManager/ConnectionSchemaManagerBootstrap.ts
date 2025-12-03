@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,6 +9,7 @@ import { AppAuthService } from '@cloudbeaver/core-authentication';
 import { importLazyComponent } from '@cloudbeaver/core-blocks';
 import {
   compareConnectionsInfo,
+  ConnectionInfoActiveProjectKey,
   ConnectionInfoResource,
   ConnectionsManagerService,
   ConnectionsSettingsService,
@@ -21,7 +22,7 @@ import { LocalizationService } from '@cloudbeaver/core-localization';
 import { EObjectFeature, NodeManagerUtils } from '@cloudbeaver/core-navigation-tree';
 import { ProjectsService } from '@cloudbeaver/core-projects';
 import { getCachedMapResourceLoaderState } from '@cloudbeaver/core-resource';
-import { OptionsPanelService } from '@cloudbeaver/core-ui';
+import { ContextMenuSearchItem, DATA_CONTEXT_MENU_SEARCH, OptionsPanelService } from '@cloudbeaver/core-ui';
 import { MenuBaseItem, menuExtractItems, MenuSeparatorItem, MenuService } from '@cloudbeaver/core-view';
 import { MENU_APP_ACTIONS } from '@cloudbeaver/plugin-top-app-bar';
 
@@ -35,7 +36,18 @@ const ConnectionIconSmall = importLazyComponent(() =>
   import('./ConnectionSelector/ConnectionIconSmall.js').then(module => module.ConnectionIconSmall),
 );
 
-@injectable()
+@injectable(() => [
+  ConnectionInfoResource,
+  ConnectionSchemaManagerService,
+  ConnectionsManagerService,
+  OptionsPanelService,
+  AppAuthService,
+  ContainerResource,
+  MenuService,
+  ConnectionsSettingsService,
+  LocalizationService,
+  ProjectsService,
+])
 export class ConnectionSchemaManagerBootstrap extends Bootstrap {
   get connectionSelectorLoading(): boolean {
     return this.connectionSchemaManagerService.isChangingConnection || this.connectionsManagerService.containerContainers.isLoading();
@@ -85,7 +97,7 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
       iconComponent: () => ConnectionIcon,
       hideIfEmpty: () => false,
       getExtraProps: () => ({ connectionKey: this.connectionSchemaManagerService.currentConnectionKey, small: true }),
-      getLoader: (context, menu) => {
+      getLoader: () => {
         if (this.isHidden()) {
           return [];
         }
@@ -93,12 +105,13 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
         const activeConnectionKey = this.connectionSchemaManagerService.activeConnectionKey;
 
         if (!activeConnectionKey) {
-          return this.appAuthService.loaders;
+          return [...this.appAuthService.loaders, getCachedMapResourceLoaderState(this.connectionInfoResource, () => ConnectionInfoActiveProjectKey)];
         }
 
         return [
           ...this.appAuthService.loaders,
           ...this.connectionSchemaManagerService.currentObjectLoaders,
+          getCachedMapResourceLoaderState(this.connectionInfoResource, () => ConnectionInfoActiveProjectKey),
           getCachedMapResourceLoaderState(this.containerResource, () => ({
             ...activeConnectionKey,
             catalogId: this.connectionSchemaManagerService.activeObjectCatalogId,
@@ -111,7 +124,9 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
       menus: [MENU_CONNECTION_SELECTOR],
       isApplicable: () => this.connectionsManagerService.hasAnyConnection() && this.connectionSchemaManagerService.isConnectionChangeable,
       getItems: (context, items) => {
-        items = [...items];
+        const filter = context.get(DATA_CONTEXT_MENU_SEARCH);
+        items = [new ContextMenuSearchItem(), ...items];
+
         const userProjectId = this.projectsService.userProject?.id;
         const activeProjectId = this.connectionSchemaManagerService.activeProjectId;
 
@@ -128,7 +143,11 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
               return false;
             }
 
-            return !connection.template;
+            if (filter) {
+              return connection.name.toLowerCase().includes(filter.toLowerCase());
+            }
+
+            return true;
           })
           .sort((a, b) => {
             if (a.connected === b.connected) {
@@ -238,7 +257,9 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
         (this.connectionSchemaManagerService.isObjectCatalogChangeable || this.connectionSchemaManagerService.isObjectSchemaChangeable) &&
         !!this.connectionSchemaManagerService.objectContainerList,
       getItems: (context, items) => {
-        items = [...items];
+        const filter = context.get(DATA_CONTEXT_MENU_SEARCH);
+
+        items = [new ContextMenuSearchItem(), ...items];
 
         if (!this.connectionSchemaManagerService.objectContainerList) {
           return [];
@@ -292,6 +313,12 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
 
           previousSelected = selected;
 
+          const excluded = !!filter && !title.toLowerCase().includes(filter.toLowerCase());
+
+          if (excluded) {
+            continue;
+          }
+
           items.push(
             new MenuBaseItem(
               {
@@ -327,6 +354,12 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
           previousSelected = selected;
 
           if (catalogData.schemaList.length === 0) {
+            const excluded = !!filter && !catalog.name.toLowerCase().includes(filter.toLowerCase());
+
+            if (excluded) {
+              continue;
+            }
+
             items.push(
               new MenuBaseItem(
                 {
@@ -353,6 +386,11 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
             }
 
             const title = NodeManagerUtils.concatSchemaAndCatalog(catalog.name, schema.name);
+            const excluded = !!filter && !title.toLowerCase().includes(filter.toLowerCase());
+
+            if (excluded) {
+              continue;
+            }
 
             items.push(
               new MenuBaseItem(
@@ -395,9 +433,8 @@ export class ConnectionSchemaManagerBootstrap extends Bootstrap {
       menus: [MENU_APP_ACTIONS],
       getItems: (context, items) => [...items, MENU_CONNECTION_SELECTOR, MENU_CONNECTION_DATA_CONTAINER_SELECTOR],
       orderItems: (context, items) => {
-        const extracted = menuExtractItems(items, [MENU_CONNECTION_SELECTOR, MENU_CONNECTION_DATA_CONTAINER_SELECTOR]);
-
-        return [...items, ...extracted];
+        items.push(...menuExtractItems(items, [MENU_CONNECTION_SELECTOR, MENU_CONNECTION_DATA_CONTAINER_SELECTOR]));
+        return items;
       },
     });
   }

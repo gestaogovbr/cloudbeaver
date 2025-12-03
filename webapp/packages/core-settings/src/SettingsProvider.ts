@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,12 +8,13 @@
 import { type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
 import type { schema } from '@cloudbeaver/core-utils';
 
-import type { ISettingChangeData, ISettingsSource } from './ISettingsSource.js';
+import type { ISettingChangeData } from './ISettingsSource.js';
+import type { IEditableSettingsSource } from './IEditableSettingsSource.js';
 
-export class SettingsProvider<TSchema extends schema.SomeZodObject = any> implements ISettingsSource {
+export class SettingsProvider<TSchema extends schema.ZodObject = any> implements IEditableSettingsSource {
   readonly onChange: ISyncExecutor<ISettingChangeData<keyof schema.infer<TSchema>>>;
   constructor(
-    private readonly source: ISettingsSource,
+    protected readonly source: IEditableSettingsSource,
     readonly schema: TSchema,
   ) {
     this.onChange = new SyncExecutor();
@@ -67,6 +68,10 @@ export class SettingsProvider<TSchema extends schema.SomeZodObject = any> implem
 
   setValue<TKey extends keyof schema.infer<TSchema>>(key: TKey, value: schema.infer<TSchema>[TKey]): void {
     this.source.setValue(key, value);
+  }
+
+  resetValue<TKey extends keyof schema.infer<TSchema>>(key: TKey): void {
+    this.source.resetValue(key);
   }
 
   clear(): void {

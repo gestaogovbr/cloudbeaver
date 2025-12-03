@@ -1,9 +1,9 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Base JDBC drivers
+Bundle-Name: Cloudbeaver Base JDBC drivers
 Bundle-SymbolicName: io.cloudbeaver.resources.drivers.base;singleton:=true
-Bundle-Version: 1.0.111.qualifier
-Bundle-Release-Date: 20241202
+Bundle-Version: 1.0.136.qualifier
+Bundle-Release-Date: 20251222
 Bundle-Vendor: DBeaver Corp
 Bundle-ActivationPolicy: lazy
 Automatic-Module-Name: io.cloudbeaver.resources.drivers.base

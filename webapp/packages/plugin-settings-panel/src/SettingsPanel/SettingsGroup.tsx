@@ -1,40 +1,82 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 
-import { getComputed, Group, GroupTitle, useTranslate } from '@cloudbeaver/core-blocks';
-import type { ISettingDescription, ISettingsSource, SettingsGroup as SettingsGroupType } from '@cloudbeaver/core-settings';
+import { getComputed, Group, GroupTitle, useExecutor, useTranslate } from '@cloudbeaver/core-blocks';
+import type {
+  IEditableSettingsSource,
+  ISettingDescription,
+  ISettingsResolverSource,
+  SettingsGroup as SettingsGroupType,
+} from '@cloudbeaver/core-settings';
 import { isArraysEqual } from '@cloudbeaver/core-utils';
 import type { ITreeFilter } from '@cloudbeaver/plugin-navigation-tree';
 
-import { getSettingGroupId } from './getSettingGroupId.js';
 import { Setting } from './Setting.js';
 import { settingsFilter } from './settingsFilter.js';
 import { SettingsGroupTitle } from './SettingsGroupTitle.js';
+import type { ISyncExecutor } from '@cloudbeaver/core-executor';
+import { useRef } from 'react';
+import { getSettingGroupId } from './getSettingGroupId.js';
 
 interface Props {
+  settingsId: string;
   group: SettingsGroupType;
-  source: ISettingsSource;
+  resolver: ISettingsResolverSource;
+  source: IEditableSettingsSource;
   settings: Map<SettingsGroupType, ISettingDescription<any>[]>;
   treeFilter: ITreeFilter;
+  groupsHidden?: boolean;
+  displayRestore?: boolean;
+  groupSelectExecutor: ISyncExecutor<string>;
 }
 
-export const SettingsGroup = observer<Props>(function SettingsGroup({ group, source, settings, treeFilter }) {
+export const SettingsGroup = observer<Props>(function SettingsGroup({
+  settingsId,
+  group,
+  resolver,
+  source,
+  settings,
+  treeFilter,
+  groupsHidden,
+  displayRestore,
+  groupSelectExecutor,
+}) {
+  const ref = useRef<HTMLDivElement>(null);
   const translate = useTranslate();
   const groupSettings = getComputed(() => settings.get(group)?.filter(settingsFilter(translate, treeFilter.filter)) || [], isArraysEqual);
+  const hidden = groupSettings.length === 0;
+
+  useExecutor({
+    executor: groupSelectExecutor,
+    handlers: [
+      id => {
+        if (id === group.id) {
+          if (hidden) {
+            const next = ref.current?.nextSibling;
+            if (next instanceof HTMLElement) {
+              next?.scrollIntoView();
+            }
+          } else {
+            ref.current?.scrollIntoView();
+          }
+        }
+      },
+    ],
+  });
 
   return (
-    <Group id={getSettingGroupId(group.id)} hidden={groupSettings.length === 0} vertical gap>
-      <GroupTitle sticky>
+    <Group ref={ref} id={getSettingGroupId(settingsId, group.id)} hidden={hidden} dense={groupsHidden} vertical gap compact>
+      <GroupTitle hidden={groupsHidden} sticky>
         <SettingsGroupTitle group={group} />
       </GroupTitle>
-      {groupSettings.map((setting, i) => (
-        <Setting key={i} source={source} setting={setting} />
+      {groupSettings.map(setting => (
+        <Setting key={setting.key} resolver={resolver} source={source} setting={setting} displayRestore={displayRestore} />
       ))}
     </Group>
   );

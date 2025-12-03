@@ -1,26 +1,25 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { action, makeObservable, observable } from 'mobx';
+import { makeObservable, observable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
-import { createSettingsLayer, ROOT_SETTINGS_LAYER, SettingsSource } from '@cloudbeaver/core-settings';
+import { createSettingsLayer, ROOT_SETTINGS_LAYER, EditableSettingsSource } from '@cloudbeaver/core-settings';
 
 export const PRODUCT_SETTINGS_LAYER = createSettingsLayer(ROOT_SETTINGS_LAYER, 'product');
 
 @injectable()
-export class ProductSettingsService extends SettingsSource {
+export class ProductSettingsService extends EditableSettingsSource {
   private readonly settings: Map<string, any>;
 
   constructor() {
     super();
     this.settings = new Map();
     makeObservable<this, 'settings'>(this, {
-      clear: action,
       settings: observable.shallow,
     });
   }

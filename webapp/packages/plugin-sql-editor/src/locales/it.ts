@@ -1,12 +1,9 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['plugin_sql_editor_sql_editor_settings_group', 'SQL Editor'],
+  ['sql_editor_settings_content_assistant_experimental_mode_name', 'Completion engine'],
+  ['sql_editor_settings_content_assistant_experimental_mode_desc', 'SQL editor content assistant mode'],
+  ['sql_editor_settings_content_assistant_experimental_mode_default', 'Legacy'],
+  ['sql_editor_settings_content_assistant_experimental_mode_new', 'Semantic'],
   ['sql_editor_settings_insert_table_aliases_name', 'Insert table aliases (in FROM clause)'],
   ['sql_editor_settings_insert_table_aliases_desc', 'Automatically inserts table aliases'],
   ['sql_editor_menu', 'SQL Editor'],
@@ -16,15 +13,16 @@ export default [
   ['sql_editor_restore', 'Restore'],
   ['sql_editor_placeholder', 'Esegui la query con Ctrl+Enter per vedere i risultati'],
   ['sql_editor_hint_empty', 'There is no proposals...'],
-  ['sql_editor_execution_plan_button_tooltip', 'Mostra il piano di esecuzione (Shift + Ctrl + E)'],
-  ['sql_editor_output_logs_button_tooltip', 'Show server output (Shift + Ctrl + O)'],
+  ['sql_editor_tools_more_menu_tooltip', 'Più strumenti'],
+  ['sql_editor_execution_plan_button_tooltip', 'Mostra il piano di esecuzione'],
+  ['sql_editor_output_logs_button_tooltip', 'Show server output'],
   ['sql_editor_output_logs_tab_title', 'Output'],
   ['sql_editor_output_logs_input_placeholder', 'Enter a part of a message to search for here'],
   ['sql_editor_output_logs_wrap_mode', 'Wrap mode'],
-  ['sql_editor_sql_execution_button_tooltip', "Esegui l'istruzione SQL (Ctrl + Enter)"],
-  ['sql_editor_sql_execution_new_tab_button_tooltip', "Esegui l'istruzione SQL in una nuova tab (Ctrl + \\)(Shift + Ctrl + Enter)"],
-  ['sql_editor_sql_execution_script_button_tooltip', 'Esegui lo script SQL (Alt + X)'],
-  ['sql_editor_sql_format_button_tooltip', 'Format SQL Script (Shift + Ctrl + F)'],
+  ['sql_editor_sql_execution_button_tooltip', "Esegui l'istruzione SQL"],
+  ['sql_editor_sql_execution_new_tab_button_tooltip', "Esegui l'istruzione SQL in una nuova tab"],
+  ['sql_editor_sql_execution_script_button_tooltip', 'Esegui lo script SQL'],
+  ['sql_editor_sql_format_button_tooltip', 'Format SQL Script'],
   ['sql_editor_sql_execution_script_lock_tooltip', 'Lock editor to prevent modifications'],
   ['sql_editor_sql_statistics_unavailable', 'Statistiche non disponibili'],
   ['sql_editor_sql_execution_executed_queries', 'Executed queries:'],
@@ -43,6 +41,10 @@ export default [
   ['plugin_sql_editor_settings_disable_description', 'Disable SQL editor for all users'],
   ['plugin_sql_editor_settings_import_max_size', 'Import limit (KB)'],
   ['plugin_sql_editor_settings_import_max_size_description', 'Maximum file size that can be imported in KB'],
-  ['plugin_sql_editor_settings_auto_save', 'Auto save'],
-  ['plugin_sql_editor_settings_auto_save_description', 'Automatically save the editor content'],
+  ['plugin_sql_editor_settings_auto_save', 'Autosave script files'],
+  ['plugin_sql_editor_settings_auto_save_description', 'Automatically save the script files'],
+  [
+    'plugin_sql_editor_settings_auto_save_description_git_integration',
+    'Automatically save the script files. This feature is only available when Git integration is turned off',
+  ],
 ];

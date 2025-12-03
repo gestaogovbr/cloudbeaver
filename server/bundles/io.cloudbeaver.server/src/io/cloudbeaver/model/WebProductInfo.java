@@ -16,7 +16,7 @@
  */
 package io.cloudbeaver.model;
 
-import io.cloudbeaver.server.CBApplication;
+import io.cloudbeaver.utils.ServletAppUtils;
 import org.eclipse.core.runtime.IProduct;
 import org.eclipse.core.runtime.Platform;
 import org.jkiss.dbeaver.model.meta.Property;
@@ -31,6 +31,12 @@ import java.util.Date;
  * Web server configuration
  */
 public class WebProductInfo {
+
+    private final boolean provideSensitiveInformation;
+
+    public WebProductInfo(boolean provideSensitiveInformation) {
+        this.provideSensitiveInformation = provideSensitiveInformation;
+    }
 
     @Property
     public String getId() {
@@ -68,7 +74,9 @@ public class WebProductInfo {
 
     @Property
     public String getLicenseInfo() {
-        return CBApplication.getInstance().getInfoDetails(new VoidProgressMonitor());
+        return provideSensitiveInformation
+            ? ServletAppUtils.getServletApplication().getInfoDetails(new VoidProgressMonitor())
+            : "";
     }
 
     @Property
@@ -76,5 +84,12 @@ public class WebProductInfo {
         IProduct product = Platform.getProduct();
         return CommonUtils.notEmpty(product.getProperty("versionUpdateURL"));
     }
+
+    @Property
+    public String getProductPurchaseURL() {
+        IProduct product = Platform.getProduct();
+        return CommonUtils.notEmpty(product.getProperty("productPurchaseURL"));
+    }
+
 
 }

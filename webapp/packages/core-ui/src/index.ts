@@ -1,10 +1,12 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
+import './module.js';
 export * from './Clipboard/ClipboardBootstrap.js';
 export * from './Clipboard/ClipboardService.js';
 
@@ -33,6 +35,7 @@ export * from './Form/FormPart.js';
 export * from './Form/formStateContext.js';
 export * from './Form/formStatusContext.js';
 export * from './Form/formValidationContext.js';
+export * from './Form/formSubmitContext.js';
 export * from './Form/IFormPart.js';
 export * from './Form/IFormProps.js';
 export * from './Form/IFormState.js';
@@ -45,6 +48,7 @@ export * from './Screens/AppScreen/OptionsPanelService.js';
 
 export * from './Tabs/ITab.js';
 export * from './Tabs/TabContext.js';
+export * from './Tabs/useTabDragAndDrop.js';
 export * from './Tabs/TabListLoader.js';
 export * from './Tabs/TabPanelLoader.js';
 export * from './Tabs/TabPanelListLoader.js';
@@ -55,6 +59,7 @@ export * from './Tabs/TabsContext.js';
 export * from './Tabs/TabsStateLoader.js';
 export * from './Tabs/useTabState.js';
 export * from './Tabs/useTabLocalState.js';
+export * from './Tabs/useTabOrderPersistence.js';
 export { default as TabStyles } from './Tabs/Tab/Tab.module.css';
 export { default as TabTitleStyles } from './Tabs/Tab/TabTitle.module.css';
 export { default as TabVerticalRotatedStyles } from './Tabs/Tab/TabVerticalRotated.module.css';
@@ -88,8 +93,6 @@ export * from './SideBarPanel/LeftBarPanelService.js';
 export * from './SideBarPanel/SideBarPanelLoader.js';
 export * from './SideBarPanel/SideBarPanelService.js';
 
-export * from './AuthenticationProviderLoader.js';
-export * from './useAuthenticationAction.js';
 export * from './Screens/AppScreen/BaseOptionsPanelService.js';
-
-export { manifest as coreUIManifest } from './manifest.js';
+export * from './ContextMenu/ContextMenuSearch/ContextMenuSearchItem.js';
+export * from './ContextMenu/ContextMenuSearch/DATA_CONTEXT_MENU_SEARCH.js';

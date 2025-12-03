@@ -1,18 +1,13 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['name', 'ru'],
   ['ui_rename_taken_or_invalid', 'Имя занято или недопустимо'],
   ['ui_tag_new', 'Новый'],
   ['ui_light_theme', 'Светлая'],
   ['ui_dark_theme', 'Темная'],
+  ['ui_system_theme', 'Устройство'],
   ['ui_stepper_back', 'Назад'],
   ['ui_load_more', 'Загрузить ещё'],
+  ['ui_processing_skip_confirmations', 'Не спрашивайте меня снова'],
   ['ui_processing_connecting', 'Подключение...'],
   ['ui_processing_loading', 'Загрузка...'],
   ['ui_processing_cancel', 'Отменить'],
@@ -37,6 +32,7 @@ export default [
   ['ui_custom', 'Настроить'],
   ['ui_configure', 'Настроить'],
   ['ui_apply', 'Применить'],
+  ['ui_replace', 'Заменить'],
   ['ui_cancel', 'Отменить'],
   ['ui_reject', 'Отклонить'],
   ['ui_ignore', 'Пропустить'],
@@ -50,6 +46,8 @@ export default [
   ['ui_errors_details', 'Информация'],
   ['ui_search', 'Поиск...'],
   ['ui_delete', 'Удалить'],
+  ['ui_enable', 'Включить'],
+  ['ui_security_warning', 'Угроза безопасности'],
   ['ui_deleting', 'Удаляется...'],
   ['ui_add', 'Добавить'],
   ['ui_revert', 'Отменить изменения'],
@@ -73,6 +71,7 @@ export default [
   ['ui_page_not_found', 'Страница не найдена'],
   ['ui_revoke', 'Запретить'],
   ['ui_grant', 'Разрешить'],
+  ['ui_granted', 'Разрешено'],
   ['ui_edit', 'Редактировать'],
   ['ui_open_in_tab', 'Открыть во вкладке'],
   ['ui_rename', 'Переименовать'],
@@ -80,6 +79,7 @@ export default [
   ['ui_create_processing', 'Создание...'],
   ['ui_folder', 'Папка'],
   ['ui_folder_new', 'Новая папка'],
+  ['ui_folder_new_default_name', 'Новая папка'],
   ['ui_rename_processing', 'Переименование...'],
   ['ui_name', 'Название'],
   ['ui_value', 'Значение'],
@@ -110,8 +110,9 @@ export default [
   ['ui_close_others', 'Закрыть другие'],
   ['ui_close_all_to_the_right', 'Закрыть все справа'],
   ['ui_close_all_to_the_left', 'Закрыть все слева'],
-  ['ui_or', 'Или'],
+  ['ui_or', 'или'],
   ['ui_download', 'Cкачать'],
+  ['ui_redownload', 'Скачать заново'],
   ['ui_download_file', 'Скачать файл'],
   ['ui_upload', 'Загрузить'],
   ['ui_import', 'Импортировать'],
@@ -134,6 +135,14 @@ export default [
   ['ui_you', 'Вы'],
   ['ui_ms', 'мс'],
   ['ui_not_found', 'Не найдено'],
+  ['ui_connection', 'Подключение'],
+  ['ui_catalog', 'Каталог'],
+  ['ui_schema', 'Схема'],
+  ['ui_project', 'Проект'],
+  ['ui_type', 'Тип'],
+  ['ui_field_is_required', 'Заполните это поле'],
+  ['ui_delete_confirmation_message', 'Вы собираетесь удалить "{arg:item}". Вы уверены?'],
+  ['ui_not_selected', 'Не выбрано'],
 
   ['root_permission_denied', 'Отказано в доступе'],
   ['root_permission_no_permission', 'У вас нет разрешения на это действие'],

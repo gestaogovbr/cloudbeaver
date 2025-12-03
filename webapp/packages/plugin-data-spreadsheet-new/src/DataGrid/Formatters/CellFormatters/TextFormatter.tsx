@@ -1,66 +1,42 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
-import { useCallback, useContext, useEffect, useRef } from 'react';
+import { useContext } from 'react';
 
-import { getComputed, IconOrImage, importLazyComponent, Loader, s, useS } from '@cloudbeaver/core-blocks';
+import { getComputed, IconOrImage, s, useS } from '@cloudbeaver/core-blocks';
 import { isValidUrl } from '@cloudbeaver/core-utils';
-import type { RenderCellProps } from '@cloudbeaver/plugin-data-grid';
-import type { IResultSetRowKey } from '@cloudbeaver/plugin-data-viewer';
+import { NullFormatter as GridNullFormatter } from '@cloudbeaver/plugin-data-grid';
 
-import { EditingContext } from '../../../Editing/EditingContext.js';
-import type { IEditorRef } from '../../CellEditor.js';
 import { CellContext } from '../../CellRenderer/CellContext.js';
 import { TableDataContext } from '../../TableDataContext.js';
 import styles from './TextFormatter.module.css';
+import type { ICellFormatterProps } from '../ICellFormatterProps.js';
 
-const CellEditor = importLazyComponent(() => import('../../CellEditor.js').then(module => module.CellEditor));
-
-export const TextFormatter = observer<RenderCellProps<IResultSetRowKey>>(function TextFormatter({ row, column }) {
-  const editorRef = useRef<IEditorRef>(null);
-  const editingContext = useContext(EditingContext);
+export const TextFormatter = observer<ICellFormatterProps>(function TextFormatter() {
   const tableDataContext = useContext(TableDataContext);
   const cellContext = useContext(CellContext);
+  const style = useS(styles);
 
   if (!cellContext.cell) {
-    throw new Error('Contexts required');
+    return null;
   }
 
-  const style = useS(styles);
   const formatter = tableDataContext.format;
-  const rawValue = getComputed(() => formatter.get(cellContext.cell!));
-  const textValue = formatter.getText(cellContext.cell!);
-  const displayValue = formatter.getDisplayString(cellContext.cell!);
+  const valueHolder = getComputed(() => formatter.get(cellContext.cell!));
+  const nullValue = getComputed(() => formatter.isNull(valueHolder));
+  const textValue = getComputed(() => formatter.getText(valueHolder));
+  const displayValue = getComputed(() => formatter.getDisplayString(valueHolder));
 
-  const classes = s(style, { textFormatter: true, nullValue: rawValue === null });
-
-  const handleClose = useCallback(() => {
-    editingContext.closeEditor(cellContext.position);
-  }, [cellContext]);
-
-  const isFocused = cellContext.isFocused;
-  useEffect(() => {
-    if (isFocused) {
-      if (cellContext.isEditing) {
-        editorRef.current?.focus();
-      }
-    }
-  }, [isFocused]);
-
-  if (cellContext.isEditing) {
-    return (
-      <div className={classes}>
-        <Loader className={s(style, { loader: true })} suspense small>
-          <CellEditor ref={editorRef} row={row} column={column} onClose={handleClose} />
-        </Loader>
-      </div>
-    );
+  if (nullValue) {
+    return <GridNullFormatter />;
   }
+
+  const classes = s(style, { textFormatter: true });
 
   return (
     <div title={displayValue} className={classes}>

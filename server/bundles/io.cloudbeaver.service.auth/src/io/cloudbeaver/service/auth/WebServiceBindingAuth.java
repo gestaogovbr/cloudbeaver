@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  */
 package io.cloudbeaver.service.auth;
 
-import io.cloudbeaver.DBWebException;
+import io.cloudbeaver.server.graphql.GraphQLEndpoint;
 import io.cloudbeaver.service.DBWBindingContext;
 import io.cloudbeaver.service.WebServiceBindingBase;
 import io.cloudbeaver.service.auth.impl.WebServiceAuthImpl;
@@ -34,38 +34,45 @@ public class WebServiceBindingAuth extends WebServiceBindingBase<DBWServiceAuth>
     }
 
     @Override
-    public void bindWiring(DBWBindingContext model) throws DBWebException {
+    public void bindWiring(DBWBindingContext model) {
         model.getQueryType()
             .dataFetcher("authLogin", env -> getService(env).authLogin(
                 getWebSession(env, false),
-                env.getArgument("provider"),
-                env.getArgument("configuration"),
-                env.getArgument("credentials"),
-                CommonUtils.toBoolean(env.getArgument("linkUser")),
-                CommonUtils.toBoolean(env.getArgument("forceSessionsLogout"))
+                getArgumentVal(env, "provider"),
+                getArgument(env, "configuration"),
+                getArgument(env, "credentials"),
+                CommonUtils.toBoolean(getArgument(env, "linkUser")),
+                CommonUtils.toBoolean(getArgument(env, "forceSessionsLogout"))
+            ))
+            .dataFetcher("federatedAuthTaskResult", env -> getService(env).federatedAuthTaskResult(
+                getWebSession(env, false),
+                getArgumentVal(env, "taskId")
             ))
             .dataFetcher("authLogoutExtended", env -> getService(env).authLogout(
+                GraphQLEndpoint.getServletRequestOrThrow(env),
                 getWebSession(env, false),
-                env.getArgument("provider"),
-                env.getArgument("configuration")
+                getArgument(env, "provider"),
+                getArgument(env, "configuration")
             ))
             .dataFetcher("authLogout", env -> {
-                getService(env).authLogout(getWebSession(env, false),
-                    env.getArgument("provider"),
-                    env.getArgument("configuration"));
+                getService(env).authLogout(
+                    GraphQLEndpoint.getServletRequestOrThrow(env),
+                    getWebSession(env, false),
+                    getArgument(env, "provider"),
+                    getArgument(env, "configuration"));
                 return true;
             })
             .dataFetcher("authUpdateStatus", env -> getService(env).authUpdateStatus(
                 getWebSession(env, false),
-                env.getArgument("authId"),
-                CommonUtils.toBoolean(env.getArgument("linkUser"))
+                getArgumentVal(env, "authId"),
+                CommonUtils.toBoolean(getArgument(env, "linkUser"))
             ))
             .dataFetcher("activeUser", env -> getService(env).activeUser(getWebSession(env, false)))
-            .dataFetcher("authProviders", env -> getService(env).getAuthProviders())
+            .dataFetcher("authProviders", env -> getService(env).getAuthProviders(GraphQLEndpoint.getServletRequestOrThrow(env)))
             .dataFetcher("authChangeLocalPassword", env -> getService(env).changeLocalPassword(
                 getWebSession(env),
-                env.getArgument("oldPassword"),
-                env.getArgument("newPassword")
+                getArgumentVal(env, "oldPassword"),
+                getArgumentVal(env, "newPassword")
             ))
             .dataFetcher("listUserProfileProperties",
                 env -> getService(env).listUserProfileProperties(getWebSession(env)))
@@ -73,11 +80,19 @@ public class WebServiceBindingAuth extends WebServiceBindingBase<DBWServiceAuth>
         model.getMutationType()
             .dataFetcher("setUserConfigurationParameter",
                 env -> getService(env).setUserConfigurationParameter(getWebSession(env),
-                    env.getArgument("name"),
-                    env.getArgument("value")))
+                    getArgumentVal(env, "name"),
+                    getArgument(env, "value")))
             .dataFetcher("setUserPreferences",
                 env -> getService(env).setUserConfigurationParameters(getWebSession(env),
-                    env.getArgument("preferences")))
+                    getArgumentVal(env, "preferences")))
+            .dataFetcher("federatedLogin", env -> getService(env).federatedLogin(
+                GraphQLEndpoint.getServletRequestOrThrow(env),
+                getWebSession(env, false),
+                getArgumentVal(env, "provider"),
+                getArgument(env, "configuration"),
+                CommonUtils.toBoolean(getArgument(env, "linkUser")),
+                CommonUtils.toBoolean(getArgument(env, "forceSessionsLogout"))
+            ))
         ;
     }
 }

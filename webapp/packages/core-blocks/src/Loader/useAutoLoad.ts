@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,6 +10,9 @@ import { useEffect, useState } from 'react';
 import { type ILoadableState, isContainsException } from '@cloudbeaver/core-utils';
 
 import { getComputed } from '../getComputed.js';
+import { useObjectRef } from '../useObjectRef.js';
+import { useService } from '@cloudbeaver/core-di';
+import { SessionExpireService } from '@cloudbeaver/core-root';
 
 export function useAutoLoad(
   component: { name: string },
@@ -17,7 +20,9 @@ export function useAutoLoad(
   enabled = true,
   lazy = false,
   throwExceptions = false,
-) {
+): void {
+  const sessionExpireService = useService(SessionExpireService);
+  const unmountedRef = useObjectRef({ unmounted: false });
   const [loadFunctionName] = useState(`${component.name}.useAutoLoad(...)` as const);
   if (!Array.isArray(state)) {
     state = [state] as ReadonlyArray<ILoadableState>;
@@ -32,7 +37,7 @@ export function useAutoLoad(
 
   const obj = {
     [loadFunctionName]: async () => {
-      if (!enabled) {
+      if (!enabled || unmountedRef.unmounted || sessionExpireService.expired) {
         return;
       }
 
@@ -70,4 +75,11 @@ export function useAutoLoad(
   useEffect(() => {
     obj[loadFunctionName]!();
   });
+
+  useEffect(
+    () => () => {
+      unmountedRef.unmounted = true;
+    },
+    [],
+  );
 }

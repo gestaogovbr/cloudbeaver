@@ -17,8 +17,8 @@
 package io.cloudbeaver.model.session;
 
 import io.cloudbeaver.model.WebServerMessage;
-import io.cloudbeaver.model.app.WebApplication;
-import io.cloudbeaver.model.app.WebAuthApplication;
+import io.cloudbeaver.model.app.ServletApplication;
+import io.cloudbeaver.model.app.ServletAuthApplication;
 import io.cloudbeaver.websocket.CBWebSessionEventHandler;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -29,6 +29,8 @@ import org.jkiss.dbeaver.model.auth.SMAuthSpace;
 import org.jkiss.dbeaver.model.auth.SMSessionContext;
 import org.jkiss.dbeaver.model.auth.impl.AbstractSessionPersistent;
 import org.jkiss.dbeaver.model.meta.Property;
+import org.jkiss.dbeaver.model.rm.RMProjectInfo;
+import org.jkiss.dbeaver.model.security.user.SMTeam;
 import org.jkiss.dbeaver.model.websocket.event.WSEvent;
 import org.jkiss.dbeaver.model.websocket.event.WSEventDeleteTempFile;
 import org.jkiss.dbeaver.model.websocket.event.session.WSSessionExpiredEvent;
@@ -36,6 +38,7 @@ import org.jkiss.dbeaver.model.websocket.event.session.WSSessionExpiredEvent;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -51,14 +54,14 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
     @NotNull
     protected final WebUserContext userContext;
     @NotNull
-    protected final WebApplication application;
+    protected final ServletApplication application;
     protected volatile long lastAccessTime;
 
     private final List<CBWebSessionEventHandler> sessionEventHandlers = new CopyOnWriteArrayList<>();
-    private WebSessionEventsFilter eventsFilter = new WebSessionEventsFilter();
+    private WebSessionEventsFilter eventsFilter;
     private final WebSessionWorkspace workspace;
 
-    public BaseWebSession(@NotNull String id, @NotNull WebApplication application) throws DBException {
+    public BaseWebSession(@NotNull String id, @NotNull ServletApplication application) throws DBException {
         this.id = id;
         this.application = application;
         this.createTime = System.currentTimeMillis();
@@ -66,6 +69,7 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
         this.workspace = createWebWorkspace();
         this.workspace.getAuthContext().addSession(this);
         this.userContext = createUserContext();
+        this.eventsFilter = new WebSessionEventsFilter(this);
     }
 
     @NotNull
@@ -122,6 +126,12 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
             userContext.refreshPermissions();
             if (userContext.isAuthorizedInSecurityManager()) {
                 userContext.refreshAccessibleProjects();
+                if (userContext.getUser() != null) {
+                    List<String> userTeamIds = Arrays.stream(userContext.getSecurityController().getCurrentUserTeams())
+                        .map(SMTeam::getTeamId)
+                        .toList();
+                    userContext.getUser().setTeams(userTeamIds.toArray(new String[0]));
+                }
             }
         } catch (DBException e) {
             addSessionError(e);
@@ -153,7 +163,7 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
     }
 
     @NotNull
-    public WebApplication getApplication() {
+    public ServletApplication getApplication() {
         return application;
     }
 
@@ -225,6 +235,11 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
         userContext.getAccessibleProjectIds().add(projectId);
     }
 
+    public void updateSessionProject(@NotNull String projectId, @NotNull RMProjectInfo rmProjectInfo) throws DBException {
+
+    }
+
+
     public void removeSessionProject(@Nullable String projectId) throws DBException {
         userContext.getAccessibleProjectIds().remove(projectId);
     }
@@ -238,9 +253,13 @@ public abstract class BaseWebSession extends AbstractSessionPersistent {
 
     @Property
     public long getRemainingTime() {
-        if (application instanceof WebAuthApplication authApplication) {
-            return authApplication.getMaxSessionIdleTime() + lastAccessTime - System.currentTimeMillis();
+        if (application instanceof ServletAuthApplication authApplication) {
+            return getMaxSessionIdleTime(authApplication) + lastAccessTime - System.currentTimeMillis();
         }
         return Integer.MAX_VALUE;
+    }
+
+    protected long getMaxSessionIdleTime(@NotNull ServletAuthApplication authApplication) {
+        return authApplication.getMaxSessionIdleTime();
     }
 }

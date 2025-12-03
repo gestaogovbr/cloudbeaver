@@ -1,16 +1,29 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['administration_server_configuration_save_confirmation_title', 'Изменение настроек сервера'],
   ['administration_server_configuration_save_confirmation_message', 'Будут изменены критичные настройки. Вы уверены?'],
 
   ['administration_configuration_wizard_configuration', 'Настройки сервера'],
   ['administration_configuration_wizard_configuration_save_error', 'Не удалось сохранить конфигурацию сервера'],
+
+  ['administration_configuration_wizard_configuration_secure_cookies', 'Принудительный HTTPS режим'],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_description',
+    'Включите принудительный HTTPS для защиты связи между сервером и клиентами. Рекомендуется для рабочих окружений. Убедитесь, что ваш HTTPS-прокси правильно настроен для корректной работы приложения',
+  ],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_warning',
+    'Данные не будут зашифрованы, если принудительный HTTPS режим выключен. Это делает их уязвимыми',
+  ],
+  ['administration_configuration_wizard_configuration_secure_cookies_docs', 'Документация по настройке сервер-прокси'],
+  ['administration_configuration_wizard_configuration_supported_hosts', 'Разрешённые URL сервера'],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_description',
+    'Вы можете указать несколько URL серверов, разделенных новой строкой. Пустое значение означает, что все URL разрешены. Доступ с IP-адресов всегда разрешен.',
+  ],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_warning',
+    'You cannot remove your current domain ({arg:host}). Open the server configuration from another allowed domain or IP-address to remove this domain.',
+  ],
 
   ['administration_configuration_wizard_configuration_server_info', 'Информация о сервере'],
   ['administration_configuration_wizard_configuration_server_name', 'Название сервера'],
@@ -41,13 +54,17 @@ export default [
   ['administration_configuration_wizard_configuration_security_public_credentials', 'Позволить сохранять приватные данные для пользователей'],
   [
     'administration_configuration_wizard_configuration_security_admin_credentials_description',
-    'Позволяет сохранять приватные данные, такие как пароли и SSH ключи',
+    'Позволяет сохранять приватные данные для настроенных подключений',
   ],
   [
     'administration_configuration_wizard_configuration_security_public_credentials_description',
-    'Пользователи будут иметь возможность сохранять приватные данные, такие как пароли и SSH ключи',
+    'Позволяет сохранять приватные данные (такие как пароли и SSH ключи) для пользователей, не являющихся администраторами',
   ],
 
   ['administration_disabled_drivers_title', 'Отключенные драйверы'],
   ['administration_disabled_drivers_search_placeholder', 'Поиск по драйверу...'],
+  [
+    'administration_disabled_drivers_enable_unsafe_driver_message',
+    'Включение этого драйвера базы данных может позволить доступ к файлам на сервере, где работает это приложение. Это может привести к потенциальному раскрытию конфиденциальных системных файлов или другой защищённой информации.\n\nПродолжайте только в том случае, если вы полностью понимаете последствия и уверены в безопасности использования этого драйвера. Неавторизованное или ненадлежащее использование может привести к проблемам с безопасностью.\n\nВы действительно хотите включить "{arg:driverName}" драйвер?',
+  ],
 ];

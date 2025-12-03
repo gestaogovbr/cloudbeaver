@@ -1,35 +1,34 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { action, autorun, computed, type IReactionDisposer, observable, runInAction, untracked } from 'mobx';
-import { useEffect } from 'react';
+import { action, computed, type IReactionDisposer, observable } from 'mobx';
 
-import { ConfirmationDialog, useExecutor, useObservableRef } from '@cloudbeaver/core-blocks';
-import { ConnectionExecutionContextService, createConnectionParam } from '@cloudbeaver/core-connections';
+import { ConfirmationDialog, getComputed, useExecutor, useObservableRef, useResource } from '@cloudbeaver/core-blocks';
+import { ConnectionDialectResource, ConnectionExecutionContextService, createConnectionParam } from '@cloudbeaver/core-connections';
 import { useService } from '@cloudbeaver/core-di';
 import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { SyncExecutor } from '@cloudbeaver/core-executor';
-import type { SqlCompletionProposal, SqlDialectInfo, SqlScriptInfoFragment } from '@cloudbeaver/core-sdk';
-import { createLastPromiseGetter, debounceAsync, type LastPromiseGetter, throttleAsync } from '@cloudbeaver/core-utils';
+import type { SqlCompletionProposal, SqlScriptInfoFragment } from '@cloudbeaver/core-sdk';
+import { createLastPromiseGetter, type LastPromiseGetter, throttleAsync } from '@cloudbeaver/core-utils';
 
 import type { ISqlEditorTabState } from '../ISqlEditorTabState.js';
 import { ESqlDataSourceFeatures } from '../SqlDataSource/ESqlDataSourceFeatures.js';
-import type { ISqlDataSource, ISqlEditorCursor } from '../SqlDataSource/ISqlDataSource.js';
-import { SqlDataSourceService } from '../SqlDataSource/SqlDataSourceService.js';
+import type { ISqlEditorCursor } from '../SqlDataSource/ISqlDataSource.js';
 import { SqlDialectInfoService } from '../SqlDialectInfoService.js';
 import { SqlEditorService } from '../SqlEditorService.js';
-import { type ISQLScriptSegment, SQLParser } from '../SQLParser.js';
+import { type ISQLScriptSegment } from '../SQLParser.js';
 import { SqlExecutionPlanService } from '../SqlResultTabs/ExecutionPlan/SqlExecutionPlanService.js';
 import { OUTPUT_LOGS_TAB_ID } from '../SqlResultTabs/OutputLogs/OUTPUT_LOGS_TAB_ID.js';
 import { SqlQueryService } from '../SqlResultTabs/SqlQueryService.js';
 import { SqlResultTabsService } from '../SqlResultTabs/SqlResultTabsService.js';
 import type { ISQLEditorData } from './ISQLEditorData.js';
-import { SQLEditorModeContext } from './SQLEditorModeContext.js';
+import { SqlEditorSettingsService } from '../SqlEditorSettingsService.js';
+import { SqlEditorModelService } from '../SqlEditorModel/SqlEditorModelService.js';
 
 interface ISQLEditorDataPrivate extends ISQLEditorData {
   readonly sqlDialectInfoService: SqlDialectInfoService;
@@ -38,22 +37,18 @@ interface ISQLEditorDataPrivate extends ISQLEditorData {
   readonly sqlEditorService: SqlEditorService;
   readonly notificationService: NotificationService;
   readonly sqlExecutionPlanService: SqlExecutionPlanService;
+  readonly sqlEditorSettingsService: SqlEditorSettingsService;
   readonly commonDialogService: CommonDialogService;
   readonly sqlResultTabsService: SqlResultTabsService;
-  readonly dataSource: ISqlDataSource | undefined;
   readonly getLastAutocomplete: LastPromiseGetter<SqlCompletionProposal[]>;
   readonly parseScript: LastPromiseGetter<SqlScriptInfoFragment>;
 
-  cursor: ISqlEditorCursor;
   readonlyState: boolean;
   executingScript: boolean;
   state: ISqlEditorTabState;
   reactionDisposer: IReactionDisposer | null;
   hintsLimitIsMet: boolean;
-  updateParserScripts(): Promise<void>;
-  loadDatabaseDataModels(): Promise<void>;
-  getExecutingQuery(script: boolean): ISQLScriptSegment | undefined;
-  getSubQuery(): ISQLScriptSegment | undefined;
+  loadDatabaseDataModels(): void;
 }
 
 const MAX_HINTS_LIMIT = 200;
@@ -67,41 +62,31 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
   const sqlExecutionPlanService = useService(SqlExecutionPlanService);
   const sqlResultTabsService = useService(SqlResultTabsService);
   const commonDialogService = useService(CommonDialogService);
-  const sqlDataSourceService = useService(SqlDataSourceService);
+  const sqlEditorSettingsService = useService(SqlEditorSettingsService);
+  const sqlEditorModelService = useService(SqlEditorModelService);
+
+  const model = sqlEditorModelService.getOrCreate(state);
+
+  const key = getComputed(() => {
+    const executionContext = model.dataSource?.executionContext;
+    if (executionContext) {
+      const context = connectionExecutionContextService.get(executionContext.id)?.context;
+      if (context) {
+        return createConnectionParam(context.projectId, context.connectionId);
+      }
+    }
+    return null;
+  });
+  const connectionDialectLoader = useResource(useSqlEditor, ConnectionDialectResource, key);
 
   const data = useObservableRef<ISQLEditorDataPrivate>(
     () => ({
-      get dataSource(): ISqlDataSource | undefined {
-        return sqlDataSourceService.get(this.state.editorId);
-      },
-      get dialect(): SqlDialectInfo | undefined {
-        const executionContext = this.dataSource?.executionContext;
-        if (!executionContext) {
-          return undefined;
-        }
-
-        return this.sqlDialectInfoService.getDialectInfo(createConnectionParam(executionContext.projectId, executionContext.connectionId));
-      },
-
-      activeSegmentMode: {
-        activeSegment: undefined,
-        activeSegmentMode: false,
-      },
-
-      get activeSegment(): ISQLScriptSegment | undefined {
-        return this.activeSegmentMode.activeSegment;
-      },
-
-      get cursorSegment(): ISQLScriptSegment | undefined {
-        return this.parser.getSegment(this.cursor.begin, -1);
-      },
-
       get readonly(): boolean {
-        return this.executingScript || this.readonlyState || !!this.dataSource?.isOutdated() || !!this.dataSource?.isReadonly() || !this.editing;
+        return this.executingScript || this.readonlyState || !!this.model.dataSource?.isReadonly() || !this.editing;
       },
 
       get editing(): boolean {
-        return this.dataSource?.isEditing() ?? false;
+        return this.model.dataSource?.isEditing() ?? false;
       },
 
       get isScriptEmpty(): boolean {
@@ -109,81 +94,47 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       },
 
       get isDisabled(): boolean {
-        if (!this.dataSource?.executionContext || !this.dataSource.isLoaded()) {
+        if (!this.model.dataSource?.executionContext || !this.model.dataSource.isLoaded()) {
           return true;
         }
 
-        const context = this.connectionExecutionContextService.get(this.dataSource.executionContext.id);
+        const context = this.connectionExecutionContextService.get(this.model.dataSource.executionContext.id);
 
         return context?.executing || false;
       },
 
       get isIncomingChanges(): boolean {
-        return this.dataSource?.isIncomingChanges ?? false;
-      },
-
-      get cursor(): ISqlEditorCursor {
-        return this.dataSource?.cursor ?? { begin: 0, end: 0 };
+        return this.model.dataSource?.isIncomingChanges ?? false;
       },
 
       get value(): string {
-        return this.dataSource?.script ?? '';
+        return this.model.dataSource?.script ?? '';
       },
 
       get incomingValue(): string | undefined {
-        return this.dataSource?.incomingScript;
+        return this.model.dataSource?.incomingScript;
       },
 
-      onMode: new SyncExecutor(),
+      get isExecutionAllowed(): boolean {
+        return !!this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.executable) && this.sqlEditorSettingsService.scriptExecutionEnabled;
+      },
+
       onExecute: new SyncExecutor(),
       onSegmentExecute: new SyncExecutor(),
-      onUpdate: new SyncExecutor(),
-      parser: new SQLParser(),
 
       readonlyState: false,
       executingScript: false,
       reactionDisposer: null,
       hintsLimitIsMet: false,
 
-      init(): void {
-        if (this.reactionDisposer) {
-          return;
-        }
-
-        this.parser.setScript(this.value);
-
-        this.reactionDisposer = autorun(() => {
-          const executionContext = this.dataSource?.executionContext;
-          if (executionContext) {
-            const context = this.connectionExecutionContextService.get(executionContext.id)?.context;
-            if (context) {
-              const key = createConnectionParam(context.projectId, context.connectionId);
-
-              untracked(() => {
-                this.sqlDialectInfoService.loadSqlDialectInfo(key).then(async () => {
-                  try {
-                    await this.updateParserScriptsDebounced();
-                  } catch {}
-                });
-              });
-            }
-          }
-        });
-      },
-
-      destruct(): void {
-        this.reactionDisposer?.();
-      },
-
       setCursor(begin: number, end = begin): void {
-        this.dataSource?.setCursor(begin, end);
+        this.model.dataSource?.setCursor(begin, end);
       },
 
       getLastAutocomplete: createLastPromiseGetter(),
-      parseScript: createLastPromiseGetter(),
 
       getHintProposals: throttleAsync(async function getHintProposals(this: ISQLEditorDataPrivate, position, simple) {
-        const executionContext = this.dataSource?.executionContext;
+        const executionContext = this.model.dataSource?.executionContext;
         if (!executionContext) {
           return [];
         }
@@ -204,13 +155,11 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       }, 300),
 
       async formatScript(): Promise<void> {
-        if (this.isDisabled || this.isScriptEmpty || !this.dataSource?.executionContext) {
+        if (this.isDisabled || this.isScriptEmpty || !this.model.dataSource?.executionContext) {
           return;
         }
 
-        await this.updateParserScripts();
-        const query = this.value;
-        const script = this.getExecutingQuery(false);
+        const script = await this.model.getResolvedSegment();
 
         if (!script) {
           return;
@@ -219,106 +168,66 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         this.onExecute.execute(true);
         try {
           this.readonlyState = true;
-          const formatted = await this.sqlDialectInfoService.formatScript(this.dataSource.executionContext, script.query);
+          const formatted = await this.sqlDialectInfoService.formatScript(this.model.dataSource.executionContext, script.query);
 
-          this.setScript(query.substring(0, script.begin) + formatted + query.substring(script.end));
-          this.setCursor(script.begin + formatted.length);
+          const cursorAnchor = this.model.cursor.anchor;
+          this.setScript(this.value.substring(0, script.begin) + formatted + this.value.substring(script.end), 'format', {
+            anchor: cursorAnchor,
+            head: cursorAnchor,
+          });
         } finally {
           this.readonlyState = false;
         }
       },
 
-      async executeQuery(): Promise<void> {
-        const isQuery = this.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
-        const isExecutable = this.dataSource?.hasFeature(ESqlDataSourceFeatures.executable);
+      async executeQuery(inNewTab = false): Promise<void> {
+        const isQuery = this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
 
-        if (!isQuery || !isExecutable) {
+        if (!isQuery || !this.isExecutionAllowed) {
           return;
         }
 
-        await this.updateParserScripts();
-        const query = this.getSubQuery();
-
         try {
-          await this.executeQueryAction(await this.executeQueryAction(query, () => this.getResolvedSegment()), query =>
-            this.sqlQueryService.executeEditorQuery(this.state, query.query, false),
-          );
+          const segment = await this.model.getResolvedSegment();
+          await this.executeQueryAction(segment, query => this.sqlQueryService.executeEditorQuery(this.state, query.query, inNewTab));
         } catch {}
       },
 
-      async loadDatabaseDataModels(): Promise<void> {
-        const query = this.getExecutingQuery(true);
-
-        await this.executeQueryAction(
-          query,
-          async () => {
-            if (this.dataSource?.databaseModels.length) {
-              this.sqlQueryService.initDatabaseDataModels(this.state);
-            }
-          },
-          true,
-          true,
-        );
-      },
-
-      async executeQueryNewTab(): Promise<void> {
-        const isQuery = this.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
-        const isExecutable = this.dataSource?.hasFeature(ESqlDataSourceFeatures.executable);
-
-        if (!isQuery || !isExecutable) {
-          return;
+      loadDatabaseDataModels(): void {
+        if (this.model.dataSource?.databaseModels.length) {
+          this.sqlQueryService.initDatabaseDataModels(this.state);
         }
-
-        await this.updateParserScripts();
-        const query = this.getSubQuery();
-
-        try {
-          await this.executeQueryAction(await this.executeQueryAction(query, () => this.getResolvedSegment()), query =>
-            this.sqlQueryService.executeEditorQuery(this.state, query.query, true),
-          );
-        } catch {}
       },
 
       async showExecutionPlan(): Promise<void> {
-        const isQuery = this.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
-        const isExecutable = this.dataSource?.hasFeature(ESqlDataSourceFeatures.executable);
+        const isQuery = this.model.dataSource?.hasFeature(ESqlDataSourceFeatures.query);
 
-        if (!isQuery || !isExecutable || !this.dialect?.supportsExplainExecutionPlan) {
+        if (!isQuery || !this.isExecutionAllowed || !this.dialect?.supportsExplainExecutionPlan) {
           return;
         }
 
-        await this.updateParserScripts();
-        const query = this.getSubQuery();
-
         try {
-          await this.executeQueryAction(await this.executeQueryAction(query, () => this.getResolvedSegment()), query =>
-            this.sqlExecutionPlanService.executeExecutionPlan(this.state, query.query),
-          );
+          const segment = await this.model.getResolvedSegment();
+          await this.executeQueryAction(segment, query => this.sqlExecutionPlanService.executeExecutionPlan(this.state, query.query));
         } catch {}
       },
 
-      async switchEditing(): Promise<void> {
-        this.dataSource?.setEditing(!this.dataSource.isEditing());
-      },
-
       async executeScript(): Promise<void> {
-        const isExecutable = this.dataSource?.hasFeature(ESqlDataSourceFeatures.executable);
-
-        if (!isExecutable || this.isDisabled || this.isScriptEmpty) {
+        if (!this.isExecutionAllowed || this.isDisabled || this.isScriptEmpty) {
           return;
         }
 
         const processableTabs = this.state.tabs.filter(tab => tab.id !== OUTPUT_LOGS_TAB_ID);
 
         if (processableTabs.length > 0) {
-          const result = await this.commonDialogService.open(ConfirmationDialog, {
+          const { status, result } = await this.commonDialogService.open(ConfirmationDialog, {
             title: 'sql_editor_close_result_tabs_dialog_title',
             message: `Do you want to close ${processableTabs.length} tabs before executing script?`,
             confirmActionText: 'ui_yes',
-            extraStatus: 'no',
+            showExtraAction: true,
           });
 
-          if (result === DialogueStateResult.Resolved) {
+          if (status === DialogueStateResult.Resolved) {
             const state = await this.sqlResultTabsService.canCloseResultTabs(this.state);
 
             if (!state) {
@@ -326,7 +235,7 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
             }
 
             this.sqlResultTabsService.removeResultTabs(this.state, [OUTPUT_LOGS_TAB_ID]);
-          } else if (result === DialogueStateResult.Rejected) {
+          } else if (!result?.isExtraAction) {
             return;
           }
         }
@@ -334,8 +243,8 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         this.onExecute.execute(true);
         try {
           this.executingScript = true;
-          await this.updateParserScripts();
-          const queries = this.parser.scripts;
+          await this.model.getResolvedSegment();
+          const queries = this.model.parser.scripts;
 
           await this.sqlQueryService.executeQueries(
             this.state,
@@ -360,42 +269,8 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         }
       },
 
-      setScript(query: string): void {
-        this.dataSource?.setScript(query);
-      },
-
-      updateParserScriptsDebounced: debounceAsync(async function updateParserScriptsThrottle() {
-        await data.updateParserScripts();
-      }, 2000),
-
-      async updateParserScripts() {
-        if (!this.dataSource?.hasFeature(ESqlDataSourceFeatures.script)) {
-          return;
-        }
-        const projectId = this.dataSource.executionContext?.projectId;
-        const connectionId = this.dataSource.executionContext?.connectionId;
-        const script = this.parser.actualScript;
-
-        if (!projectId || !connectionId || !script) {
-          this.parser.setQueries([]);
-          this.onUpdate.execute();
-          return;
-        }
-
-        const { queries } = await this.parseScript([connectionId, script], async () => {
-          try {
-            return await this.sqlEditorService.parseSQLScript(projectId, connectionId, script);
-          } catch (exception: any) {
-            this.notificationService.logException(exception, 'Failed to parse SQL script');
-            throw exception;
-          }
-        });
-
-        // check if script was changed while we were waiting for response
-        if (this.parser.actualScript === script) {
-          this.parser.setQueries(queries);
-          this.onUpdate.execute();
-        }
+      setScript(query: string, source?: string, cursor?: ISqlEditorCursor): void {
+        this.model.dataSource?.setScript(query, source, cursor);
       },
 
       async executeQueryAction<T>(
@@ -404,93 +279,50 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
         passEmpty?: boolean,
         passDisabled?: boolean,
       ): Promise<T | undefined> {
-        if (!segment || (this.isDisabled && !passDisabled) || (!passEmpty && this.isScriptEmpty)) {
+        if (!segment || segment.end === segment.begin || (this.isDisabled && !passDisabled) || (!passEmpty && this.isScriptEmpty)) {
           return;
         }
 
         this.onExecute.execute(true);
 
+        const id = setTimeout(() => this.onSegmentExecute.execute({ segment, type: 'start' }), 250);
         try {
-          const id = setTimeout(() => this.onSegmentExecute.execute({ segment, type: 'start' }), 250);
           const result = await action(segment);
           clearTimeout(id);
           this.onSegmentExecute.execute({ segment, type: 'end' });
           return result;
         } catch (exception: any) {
+          clearTimeout(id);
           this.onSegmentExecute.execute({ segment, type: 'end' });
           this.onSegmentExecute.execute({ segment, type: 'error' });
           throw exception;
         }
       },
-
-      getExecutingQuery(script: boolean): ISQLScriptSegment | undefined {
-        if (script) {
-          return this.parser.getScriptSegment();
-        }
-
-        return this.activeSegment;
-      },
-
-      async getResolvedSegment(): Promise<ISQLScriptSegment | undefined> {
-        const projectId = this.dataSource?.executionContext?.projectId;
-        const connectionId = this.dataSource?.executionContext?.connectionId;
-
-        await data.updateParserScripts();
-
-        if (!projectId || !connectionId || this.cursor.begin !== this.cursor.end) {
-          return this.getSubQuery();
-        }
-
-        if (this.activeSegmentMode.activeSegmentMode) {
-          return this.activeSegment;
-        }
-
-        const result = await this.sqlEditorService.parseSQLQuery(projectId, connectionId, this.value, this.cursor.begin);
-
-        if (result.end === 0 && result.start === 0) {
-          return;
-        }
-
-        const segment = this.parser.getSegment(result.start, result.end);
-        return segment;
-      },
-
-      getSubQuery(): ISQLScriptSegment | undefined {
-        const query = this.getExecutingQuery(false);
-
-        if (!query) {
-          return undefined;
-        }
-
-        query.query = query.query.trim();
-
-        return query;
-      },
       setModeId(tabId: string): void {
         this.state.currentModeId = tabId;
-        this.onUpdate.execute();
       },
     }),
     {
       getHintProposals: action.bound,
       formatScript: action.bound,
       executeQuery: action.bound,
-      executeQueryNewTab: action.bound,
       showExecutionPlan: action.bound,
       executeScript: action.bound,
-      switchEditing: action.bound,
-      dialect: computed,
       isDisabled: computed,
       value: computed,
       readonly: computed,
-      cursor: computed,
-      activeSegmentMode: observable.ref,
+      state: observable.ref,
+      model: observable.ref,
+      dialect: observable.ref,
       hintsLimitIsMet: observable.ref,
       readonlyState: observable,
       executingScript: observable,
+      sqlEditorSettingsService: observable.ref,
     },
     {
       state,
+      model,
+      dialect: connectionDialectLoader.tryGetData,
       connectionExecutionContextService,
       sqlQueryService,
       sqlDialectInfoService,
@@ -499,61 +331,18 @@ export function useSqlEditor(state: ISqlEditorTabState): ISQLEditorData {
       sqlResultTabsService,
       notificationService,
       commonDialogService,
+      sqlEditorSettingsService,
     },
   );
 
-  untracked(() => data.init());
-
   useExecutor({
-    executor: data.dataSource?.onSetScript,
-    handlers: [
-      function setScript({ script }) {
-        // ensure that cursor is in script boundaries
-        data.setCursor(data.cursor.begin, data.cursor.end);
-        data.parser.setScript(script);
-        data.updateParserScriptsDebounced().catch(() => {});
-        data.onUpdate.execute();
-      },
-    ],
-  });
-
-  useExecutor({
-    executor: data.dataSource?.onDatabaseModelUpdate,
+    executor: model.dataSource?.onDatabaseModelUpdate,
     handlers: [
       function updateDatabaseModels() {
         data.loadDatabaseDataModels();
       },
     ],
   });
-
-  useExecutor({
-    executor: data.onUpdate,
-    handlers: [
-      function updateActiveSegmentMode() {
-        // Probably we need to rework this logic
-        // we want to track active segment mode with mobx
-        // right now it's leads to bag when script changed from empty to not empty
-        // data.isLineScriptEmpty skips this change
-        const contexts = data.onMode.execute(data);
-        data.activeSegmentMode = contexts.getContext(SQLEditorModeContext);
-      },
-    ],
-  });
-
-  useEffect(() => {
-    const subscription = autorun(() => {
-      const contexts = data.onMode.execute(data);
-      const activeSegmentMode = contexts.getContext(SQLEditorModeContext);
-
-      runInAction(() => {
-        data.activeSegmentMode = activeSegmentMode;
-      });
-    });
-
-    return subscription;
-  }, [data]);
-
-  useEffect(() => () => data.destruct(), []);
 
   return data;
 }

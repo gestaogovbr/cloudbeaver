@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import { useService } from '@cloudbeaver/core-di';
 import { ResultDataFormat } from '@cloudbeaver/core-sdk';
 import { CaptureView } from '@cloudbeaver/core-view';
 
-import { DatabaseDataConstraintAction } from '../DatabaseDataModel/Actions/DatabaseDataConstraintAction.js';
 import { type IDatabaseDataOptions } from '../DatabaseDataModel/IDatabaseDataOptions.js';
 import { DataPresentationService, DataPresentationType } from '../DataPresentationService.js';
 import { isResultSetDataModel } from '../ResultSet/isResultSetDataModel.js';
@@ -43,6 +42,7 @@ import { TablePresentationBar } from './TablePresentationBar/TablePresentationBa
 import { TableToolsPanel } from './TableToolsPanel.js';
 import style from './TableViewer.module.css';
 import { TableViewerStorageService } from './TableViewerStorageService.js';
+import { IDatabaseDataConstraintAction } from '../DatabaseDataModel/Actions/IDatabaseDataConstraintAction.js';
 
 export interface TableViewerProps {
   tableId: string;
@@ -83,7 +83,7 @@ export const TableViewer = observer<TableViewerProps, HTMLDivElement>(
           return;
         }
 
-        const constraints = unknownModel?.source.tryGetAction(resultIndex, DatabaseDataConstraintAction);
+        const constraints = unknownModel?.source.tryGetAction(resultIndex, IDatabaseDataConstraintAction);
 
         if (constraints) {
           constraints.deleteAll();
@@ -197,7 +197,7 @@ export const TableViewer = observer<TableViewerProps, HTMLDivElement>(
 
     const isStatistics = result?.loadedFully && !result.data;
     const resultExist = dataModel.source.hasResult(resultIndex);
-    const overlay = dataModel.source.results.length > 0 && presentation.dataFormat === dataFormat;
+    const overlay = getComputed(() => dataModel.source.results.length > 0 && presentation.dataFormat === dataFormat);
     const valuePanelDisplayed =
       valuePresentation &&
       (valuePresentation.dataFormat === undefined || valuePresentation.dataFormat === dataFormat) &&

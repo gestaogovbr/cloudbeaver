@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,12 +8,14 @@
 import { action, computed, makeObservable, observable, toJS } from 'mobx';
 
 import { executorHandlerFilter, ExecutorInterrupter, type IExecutionContextProvider } from '@cloudbeaver/core-executor';
-import { isObjectsEqual } from '@cloudbeaver/core-utils';
+import { isObjectsEqual, schema } from '@cloudbeaver/core-utils';
 
 import type { IFormPart } from './IFormPart.js';
 import type { IFormState } from './IFormState.js';
+import { formSubmitContext } from './formSubmitContext.js';
+import { formValidationContext } from './formValidationContext.js';
 
-export abstract class FormPart<TPartState, TFormState = any> implements IFormPart<TPartState> {
+export abstract class FormPart<TPartState extends object, TFormState = any> implements IFormPart<TPartState> {
   state: TPartState;
   initialState: TPartState;
   isSaving: boolean;
@@ -23,10 +25,12 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
 
   protected loaded: boolean;
   protected loading: boolean;
+  readonly schema: schema.ZodType<TPartState> | null;
 
   constructor(
     protected readonly formState: IFormState<TFormState>,
     initialState: TPartState,
+    schema: schema.ZodType<TPartState> | null = null,
   ) {
     this.initialState = initialState;
     this.state = toJS(this.initialState);
@@ -37,14 +41,16 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
 
     this.loaded = false;
     this.loading = false;
+    this.schema = schema;
 
     this.formState.submitTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.save.bind(this)));
-    this.formState.formatTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.format.bind(this)));
-    this.formState.validationTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.validate.bind(this)));
+    this.formState.formatTask.addHandler(executorHandlerFilter(() => this.isLoaded() && this.isChanged, this.format.bind(this)));
+    this.formState.validationTask.addHandler(executorHandlerFilter(() => this.isLoaded(), this.handleValidation.bind(this)));
 
-    makeObservable<this, 'loaded' | 'loading' | 'setInitialState'>(this, {
+    makeObservable<this, 'loaded' | 'loading' | 'setInitialState' | 'setState' | 'schema'>(this, {
       initialState: observable,
       state: observable,
+      schema: observable.ref,
       exception: observable.ref,
       promise: observable.ref,
       isSaving: observable.ref,
@@ -53,6 +59,7 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
       setInitialState: action,
       isDisabled: computed,
       isChanged: computed,
+      setState: action,
     });
   }
 
@@ -84,16 +91,18 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
     return !isObjectsEqual(this.initialState, this.state);
   }
 
-  async save(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): Promise<any> {
+  async save(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): Promise<void> {
     if (this.loading) {
       return;
     }
+
     this.loading = true;
 
     try {
       await this.loader();
+      const formSubmit = contexts.getContext(formSubmitContext);
 
-      if (!this.isChanged) {
+      if (!this.isChanged && !formSubmit.submitOnNoChanges) {
         return;
       }
 
@@ -125,12 +134,12 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
       this.promise = this.loader();
 
       await this.promise;
-      this.loaded = true;
       this.exception = null;
       await this.formState.loadedTask.execute(this.formState);
     } catch (exception: any) {
       this.exception = exception;
     } finally {
+      this.loaded = true;
       this.promise = null;
       this.loading = false;
     }
@@ -141,21 +150,45 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
     await this.load();
   }
 
-  reset() {
+  reset(): void {
     this.setState(toJS(this.initialState));
   }
 
-  protected setInitialState(initialState: TPartState) {
+  private async handleValidation(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): Promise<void> {
+    const validation = contexts.getContext(formValidationContext);
+
+    try {
+      if (this.schema) {
+        const parsedState = this.schema.parse(toJS(this.state));
+        this.setState(observable(parsedState));
+      }
+    } catch (e: any) {
+      validation.error(schema.prettifyError(e));
+      return;
+    }
+
+    try {
+      this.exception = null;
+
+      await this.validate(data, contexts);
+    } catch (exception: any) {
+      this.exception = exception;
+    }
+  }
+
+  protected setInitialState(initialState: TPartState): void {
+    const isChanged = this.isChanged;
+
     this.initialState = initialState;
 
-    if (this.isChanged) {
+    if (isChanged) {
       return;
     }
 
     this.setState(toJS(this.initialState));
   }
 
-  protected setState(state: TPartState) {
+  protected setState(state: TPartState): void {
     this.state = state;
   }
 
@@ -164,4 +197,5 @@ export abstract class FormPart<TPartState, TFormState = any> implements IFormPar
 
   protected abstract loader(): Promise<void>;
   protected abstract saveChanges(data: IFormState<TFormState>, contexts: IExecutionContextProvider<IFormState<TFormState>>): Promise<void>;
+  dispose(): void | Promise<void> {}
 }

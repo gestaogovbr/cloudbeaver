@@ -2,6 +2,8 @@
   "name": "@cloudbeaver/core-session-localization",
   "type": "module",
   "sideEffects": [
+    "./lib/module.js",
+    "./lib/index.js",
     "src/**/*.css",
     "src/**/*.scss",
     "public/**/*"
@@ -9,23 +11,30 @@
   "version": "0.1.0",
   "description": "",
   "license": "Apache-2.0",
-  "main": "dist/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./module": "./lib/module.js"
+  },
   "scripts": {
     "build": "tsc -b",
-    "clean": "rimraf --glob dist",
+    "clean": "rimraf --glob lib",
     "lint": "eslint ./src/ --ext .ts,.tsx",
-    "test": "core-cli-test",
-    "validate-dependencies": "core-cli-validate-dependencies",
-    "update-ts-references": "yarn run clean && typescript-resolve-references"
+    "test": "dbeaver-test",
+    "validate-dependencies": "core-cli-validate-dependencies"
   },
   "dependencies": {
-    "@cloudbeaver/core-di": "^0",
-    "@cloudbeaver/core-localization": "^0",
-    "@cloudbeaver/core-root": "^0",
-    "@cloudbeaver/core-settings-localization": "^0"
+    "@cloudbeaver/core-di": "workspace:*",
+    "@cloudbeaver/core-localization": "workspace:*",
+    "@cloudbeaver/core-root": "workspace:*",
+    "@cloudbeaver/core-settings": "workspace:*",
+    "@cloudbeaver/core-settings-localization": "workspace:*",
+    "tslib": "^2"
   },
-  "peerDependencies": {},
   "devDependencies": {
+    "@cloudbeaver/core-cli": "workspace:*",
+    "@cloudbeaver/tsconfig": "workspace:*",
+    "@dbeaver/cli": "workspace:*",
+    "rimraf": "^6",
     "typescript": "^5"
   }
 }

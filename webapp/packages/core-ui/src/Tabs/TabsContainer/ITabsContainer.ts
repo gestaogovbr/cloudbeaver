@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@ export interface ITabData<T = void> {
   props: T;
 }
 
-export type TabContainerTabComponent<TProps = void> = React.FC<TabProps & TProps>;
-export type TabContainerPanelComponent<TProps = void> = React.FC<{ tabId: string; className?: string } & TProps>;
+export type TabContainerTabComponent<TProps = {}> = React.FC<TabProps & TProps>;
+export type TabContainerPanelComponent<TProps = {}> = React.FC<{ tabId: string; className?: string } & TProps>;
 
-export interface ITabInfoOptions<TProps = void, TOptions extends Record<string, any> = never> {
+export interface ITabInfoOptions<TProps = void, TOptions extends Record<string, any> | unknown = unknown> {
   key: string;
   name?: string;
   title?: string;
@@ -41,11 +41,11 @@ export interface ITabInfoOptions<TProps = void, TOptions extends Record<string, 
   onOpen?: (tab: ITabData<TProps>) => void;
 }
 
-export interface ITabInfo<TProps = void, TOptions extends Record<string, any> = never> extends ITabInfoOptions<TProps, TOptions> {
+export interface ITabInfo<TProps = void, TOptions extends Record<string, any> | unknown = unknown> extends ITabInfoOptions<TProps, TOptions> {
   order: number;
 }
 
-export interface ITabsContainer<TProps = void, TOptions extends Record<string, any> = never> {
+export interface ITabsContainer<TProps = void, TOptions extends Record<string, any> | unknown = unknown> {
   readonly areaLabel: string;
   readonly tabInfoList: Array<ITabInfo<TProps, TOptions>>;
   readonly selectedId: string | null;
@@ -57,8 +57,9 @@ export interface ITabsContainer<TProps = void, TOptions extends Record<string, a
     tabId: string,
     props: TProps,
     valueGetter?: MetadataValueGetter<string, T>,
-    schema?: schema.AnyZodObject,
+    schema?: schema.ZodObject,
   ) => T;
+  setTabState: <T>(state: MetadataMap<string, any>, tabId: string, value: T) => T;
   getDisplayed: (props?: TProps) => Array<ITabInfo<TProps, TOptions>>;
   getIdList: (props?: TProps) => string[];
 }

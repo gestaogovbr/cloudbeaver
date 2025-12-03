@@ -16,15 +16,21 @@
  */
 package io.cloudbeaver.utils;
 
+import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.session.WebSession;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.app.DBPProject;
+import org.jkiss.dbeaver.model.security.SMSubjectType;
 import org.jkiss.dbeaver.model.websocket.WSConstants;
 import org.jkiss.dbeaver.model.websocket.event.WSEvent;
 import org.jkiss.dbeaver.model.websocket.event.datasource.WSDataSourceEvent;
 import org.jkiss.dbeaver.model.websocket.event.datasource.WSDataSourceProperty;
 import org.jkiss.dbeaver.model.websocket.event.datasource.WSDatasourceFolderEvent;
+import org.jkiss.dbeaver.model.websocket.event.permissions.WSSubjectPermissionEvent;
 import org.jkiss.dbeaver.model.websocket.event.resource.WSResourceProperty;
 import org.jkiss.dbeaver.model.websocket.event.resource.WSResourceUpdatedEvent;
+import org.jkiss.dbeaver.model.websocket.event.session.WSSessionTaskInfoEvent;
 
 import java.util.List;
 
@@ -80,7 +86,7 @@ public class WebEventUtils {
         if (event == null) {
             return;
         }
-        WebAppUtils.getWebApplication().getEventController().addEvent(event);
+        ServletAppUtils.getServletApplication().getEventController().addEvent(event);
     }
 
     public static void addNavigatorNodeUpdatedEvent(
@@ -122,7 +128,7 @@ public class WebEventUtils {
         if (event == null) {
             return;
         }
-        WebAppUtils.getWebApplication().getEventController().addEvent(event);
+        ServletAppUtils.getServletApplication().getEventController().addEvent(event);
     }
 
     public static void addRmResourceUpdatedEvent(
@@ -179,7 +185,32 @@ public class WebEventUtils {
         if (event == null) {
             return;
         }
-        WebAppUtils.getWebApplication().getEventController().addEvent(event);
+        ServletAppUtils.getServletApplication().getEventController().addEvent(event);
+    }
+
+    public static void sendAsyncTaskEvent(@NotNull WebSession webSession, @NotNull WebAsyncTaskInfo taskInfo) {
+        webSession.addSessionEvent(
+            new WSSessionTaskInfoEvent(
+                taskInfo.getId(),
+                taskInfo.getStatus(),
+                taskInfo.isRunning()
+            )
+        );
+    }
+
+    public static void addSubjectPermissionsUpdateEvent(
+        @NotNull String subjectId,
+        @NotNull SMSubjectType subjectType,
+        @Nullable String smSessionId,
+        @Nullable String userId
+    ) {
+        var event = WSSubjectPermissionEvent.update(
+            smSessionId,
+            userId,
+            subjectType,
+            subjectId
+        );
+        ServletAppUtils.getServletApplication().getEventController().addEvent(event);
     }
 
 }

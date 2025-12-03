@@ -1,16 +1,18 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import {
   catchError,
+  concatMap,
   debounceTime,
+  defer,
   delayWhen,
   filter,
-  interval,
+  from,
   map,
   merge,
   Observable,
@@ -19,13 +21,16 @@ import {
   repeat,
   retry,
   share,
+  shareReplay,
   Subject,
+  switchMap,
   throwError,
+  timer,
 } from 'rxjs';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 
 import { injectable } from '@cloudbeaver/core-di';
-import { type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
+import { Executor, type IExecutor, type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
 import {
   CbClientEventId as ClientEventId,
   EnvironmentService,
@@ -34,8 +39,7 @@ import {
   CbEventTopic as SessionEventTopic,
 } from '@cloudbeaver/core-sdk';
 
-import { NetworkStateService } from './NetworkStateService.js';
-import type { IBaseServerEvent, IServerEventCallback, IServerEventEmitter, Subscription } from './ServerEventEmitter/IServerEventEmitter.js';
+import type { IBaseServerEvent, IServerEventCallback, IServerEventEmitter, Unsubscribe } from './ServerEventEmitter/IServerEventEmitter.js';
 import { SessionExpireService } from './SessionExpireService.js';
 
 export { ServerEventId, SessionEventTopic, ClientEventId };
@@ -53,11 +57,13 @@ export interface ITopicSubEvent extends ISessionEvent {
   topicId: SessionEventTopic;
 }
 
-const RETRY_INTERVAL = 30 * 1000;
+const RETRY_INTERVALS = [1000, 5000, 30000, 60000]; // 1s, 5s, 30s, 1m
+const MAX_RETRY_ATTEMPTS = 4;
 
-@injectable()
+@injectable(() => [SessionExpireService, EnvironmentService])
 export class SessionEventSource implements IServerEventEmitter<ISessionEvent, ISessionEvent, SessionEventId, SessionEventTopic> {
   readonly eventsSubject: Observable<ISessionEvent>;
+  readonly onActivate: IExecutor;
   readonly onInit: ISyncExecutor;
 
   private readonly closeSubject: Subject<CloseEvent>;
@@ -66,15 +72,14 @@ export class SessionEventSource implements IServerEventEmitter<ISessionEvent, IS
   private readonly subject: WebSocketSubject<ISessionEvent>;
   private readonly oldEventsSubject: Subject<ISessionEvent>;
   private readonly emitSubject: Subject<ISessionEvent>;
-  private readonly retryTimer: Observable<number>;
   private readonly disconnectSubject: Subject<boolean>;
   private disconnected: boolean;
 
   constructor(
-    networkStateService: NetworkStateService,
     private readonly sessionExpireService: SessionExpireService,
     environmentService: EnvironmentService,
   ) {
+    this.onActivate = new Executor();
     this.onInit = new SyncExecutor();
     this.oldEventsSubject = new Subject();
     this.disconnectSubject = new Subject();
@@ -82,36 +87,40 @@ export class SessionEventSource implements IServerEventEmitter<ISessionEvent, IS
     this.openSubject = new Subject();
     this.errorSubject = new Subject();
     this.disconnected = false;
-    this.retryTimer = interval(RETRY_INTERVAL).pipe(
-      filter(() => !this.sessionExpireService.expired && networkStateService.state && !this.disconnected),
-    );
     this.subject = webSocket({
       url: environmentService.wsEndpoint,
       closeObserver: this.closeSubject,
       openObserver: this.openSubject,
     });
 
+    const ready$ = defer(() => from(this.onActivate.execute())).pipe(shareReplay(1));
+
     this.emitSubject = new Subject();
-    this.emitSubject.pipe(this.handleDisconnected()).subscribe(this.subject);
+    this.emitSubject
+      .pipe(
+        this.handleDisconnected(),
+        concatMap(value => ready$.pipe(concatMap(() => from([value])))),
+      )
+      .subscribe(this.subject);
 
     this.openSubject.subscribe(() => {
       this.onInit.execute();
     });
 
     this.closeSubject.subscribe(event => {
-      console.info(`Websocket closed: ${event.reason}`);
+      console.warn(`Websocket closed (${event.code}): ${event.reason}`);
     });
 
-    this.eventsSubject = merge(this.oldEventsSubject, this.subject).pipe(this.handleErrors());
+    this.eventsSubject = merge(this.oldEventsSubject, ready$.pipe(switchMap(() => this.subject))).pipe(this.handleErrors());
 
     this.errorSubject.pipe(debounceTime(1000)).subscribe(error => {
-      console.error(error);
+      console.error('Websocket:', error);
     });
 
     this.errorHandler = this.errorHandler.bind(this);
   }
 
-  onEvent<T = ISessionEvent>(id: SessionEventId, callback: IServerEventCallback<T>, mapTo: (event: ISessionEvent) => T = e => e as T): Subscription {
+  onEvent<T = ISessionEvent>(id: SessionEventId, callback: IServerEventCallback<T>, mapTo: (event: ISessionEvent) => T = e => e as T): Unsubscribe {
     const sub = this.eventsSubject
       .pipe(
         filter(event => event.id === id),
@@ -128,7 +137,7 @@ export class SessionEventSource implements IServerEventEmitter<ISessionEvent, IS
     callback: IServerEventCallback<T>,
     mapTo: (event: ISessionEvent) => T = e => e as T,
     filterFn: (event: ISessionEvent) => boolean = () => true,
-  ): Subscription {
+  ): Unsubscribe {
     const sub = this.eventsSubject.pipe(filter(filterFn), map(mapTo)).subscribe(callback);
 
     return () => {
@@ -174,12 +183,12 @@ export class SessionEventSource implements IServerEventEmitter<ISessionEvent, IS
     return this;
   }
 
-  connect() {
+  connect(): void {
     this.disconnected = false;
     this.disconnectSubject.next(this.disconnected);
   }
 
-  disconnect() {
+  disconnect(): void {
     this.disconnected = true;
     this.disconnectSubject.next(this.disconnected);
   }
@@ -195,10 +204,31 @@ export class SessionEventSource implements IServerEventEmitter<ISessionEvent, IS
 
   private handleErrors() {
     return (source: Observable<ISessionEvent>): Observable<ISessionEvent> =>
-      source.pipe(share(), catchError(this.errorHandler), retry({ delay: () => this.retryTimer }), repeat({ delay: () => this.retryTimer }));
+      source.pipe(
+        share(),
+        catchError(this.errorHandler.bind(this)),
+        retry({
+          count: MAX_RETRY_ATTEMPTS,
+          delay: (error, retryCount) => {
+            // Stop retrying if session expired or disconnected
+            if (this.sessionExpireService.expired || this.disconnected) {
+              return throwError(() => error);
+            }
+
+            const delayIndex = Math.min(retryCount - 1, RETRY_INTERVALS.length - 1);
+            const delayTime = RETRY_INTERVALS[delayIndex]!;
+            console.warn(`WebSocket retry attempt ${retryCount}/${MAX_RETRY_ATTEMPTS} in ${delayTime}ms`);
+
+            return timer(delayTime);
+          },
+        }),
+        repeat({
+          delay: () => timer(RETRY_INTERVALS[0]!),
+        }),
+      );
   }
 
-  private errorHandler(error: any, caught: Observable<ISessionEvent>): Observable<ISessionEvent> {
+  private errorHandler(error: any): Observable<ISessionEvent> {
     this.errorSubject.next(new ServiceError('WebSocket connection error', { cause: error }));
     return throwError(() => error);
   }

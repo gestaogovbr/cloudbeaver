@@ -5,6 +5,44 @@
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+@layer components {
+  .field {
+    --dbv-kit-control-outline-offset: -8px;
+    position: relative;
+
+    .switchBody {
+      display: flex;
+      align-items: center;
+
+      & .fieldLabel {
+        cursor: pointer;
+        user-select: none;
+        display: block;
+        padding-left: 18px;
+        min-width: 50px;
+        white-space: pre-wrap !important;
+      }
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: var(--dbv-kit-control-outline-offset);
+      left: var(--dbv-kit-control-outline-offset);
+      right: var(--dbv-kit-control-outline-offset);
+      bottom: var(--dbv-kit-control-outline-offset);
+      border-radius: var(--dbv-kit-control-border-radius);
+      border: var(--dbv-kit-control-outline-width) solid transparent;
+      pointer-events: none;
+    }
+
+    &:has(.switchInput:focus-visible)::before {
+      border-color: var(--dbv-kit-control-outline-color);
+      border-width: var(--dbv-kit-control-outline-width);
+    }
+  }
+}
+
 .switchControl {
   composes: theme-switch from global;
 }
@@ -33,22 +71,6 @@
   composes: theme-switch__thumb from global;
 }
 
-.radioRipple {
-  composes: theme-radio_ripple from global;
-}
-
 .switchBody {
-  display: flex;
-  align-items: center;
   composes: theme-typography--body1 from global;
-
-  & .fieldLabel {
-    cursor: pointer;
-    user-select: none;
-    display: block;
-    padding-left: 18px;
-    min-width: 50px;
-    white-space: pre-wrap;
-    font-weight: 500;
-  }
 }

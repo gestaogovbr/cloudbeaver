@@ -1,13 +1,13 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 
-import { CommonDialogHeader, CommonDialogWrapper, useResource, useTranslate } from '@cloudbeaver/core-blocks';
+import { CommonDialogHeader, CommonDialogWrapper, useResource } from '@cloudbeaver/core-blocks';
 import { ConnectionInfoResource, ConnectionPublicSecretsResource, DBDriverResource, type IConnectionInfoParams } from '@cloudbeaver/core-connections';
 import type { DialogComponent } from '@cloudbeaver/core-dialogs';
 
@@ -21,10 +21,7 @@ interface Payload {
 }
 
 export const DatabaseAuthDialog: DialogComponent<Payload> = observer(function DatabaseAuthDialog({ payload, options, rejectDialog, resolveDialog }) {
-  const connectionInfoLoader = useResource(DatabaseAuthDialog, ConnectionInfoResource, {
-    key: payload.connection,
-    includes: ['includeAuthNeeded', 'includeNetworkHandlersConfig', 'includeCredentialsSaved'],
-  });
+  const connectionInfoLoader = useResource(DatabaseAuthDialog, ConnectionInfoResource, payload.connection);
   const driverLoader = useResource(DatabaseAuthDialog, DBDriverResource, connectionInfoLoader.data?.driverId || null);
   const connectionPublicSecretsLoader = useResource(DatabaseSecretAuthDialog, ConnectionPublicSecretsResource, payload.connection);
   const useSharedCredentials = (connectionPublicSecretsLoader.data?.length || 0) > 1;

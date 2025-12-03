@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,10 +11,11 @@ import type { AdminUser, AuthRolesResource, UserMetaParameter, UsersMetaParamete
 import type { IExecutionContextProvider } from '@cloudbeaver/core-executor';
 import type { ServerConfigResource } from '@cloudbeaver/core-root';
 import { FormMode, FormPart, formValidationContext, type IFormState } from '@cloudbeaver/core-ui';
-import { isArraysEqual, isDefined, isObjectsEqual, isValuesEqual } from '@cloudbeaver/core-utils';
+import { isArraysEqual, isObjectsEqual, isValuesEqual } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 
 import type { IUserFormState } from '../AdministrationUserFormService.js';
-import type { IUserFormInfoState } from './IUserFormInfoState.js';
+import { USER_FORM_INFO_PART_SCHEMA, type IUserFormInfoState } from './IUserFormInfoState.js';
 
 const DEFAULT_ENABLED = true;
 
@@ -26,33 +27,20 @@ export class UserFormInfoPart extends FormPart<IUserFormInfoState, IUserFormStat
     private readonly usersResource: UsersResource,
     private readonly usersMetaParametersResource: UsersMetaParametersResource,
   ) {
-    super(formState, {
-      userId: formState.state.userId || '',
-      enabled: DEFAULT_ENABLED,
-      password: '',
-      metaParameters: {},
-      teams: [],
-      authRole: '',
-    });
+    super(
+      formState,
+      {
+        userId: formState.state.userId || '',
+        enabled: DEFAULT_ENABLED,
+        password: '',
+        metaParameters: {},
+        teams: [],
+        authRole: '',
+      },
+      USER_FORM_INFO_PART_SCHEMA,
+    );
 
     this.disableUser = this.disableUser.bind(this);
-  }
-
-  protected override format(data: IFormState<IUserFormState>, contexts: IExecutionContextProvider<IFormState<IUserFormState>>): void | Promise<void> {
-    this.state.password = this.state.password.trim();
-    const metaParameters = this.state.metaParameters;
-
-    if (this.formState.mode === FormMode.Create) {
-      this.state.userId = this.state.userId.trim();
-    }
-
-    for (const key in metaParameters) {
-      const value = metaParameters[key];
-
-      if (typeof value === 'string') {
-        metaParameters[key] = value.trim();
-      }
-    }
   }
 
   override isOutdated(): boolean {

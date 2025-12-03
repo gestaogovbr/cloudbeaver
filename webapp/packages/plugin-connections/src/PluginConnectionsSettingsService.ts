@@ -1,12 +1,13 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { Dependency, injectable } from '@cloudbeaver/core-di';
-import { SettingsManagerService, SettingsProvider, SettingsProviderService } from '@cloudbeaver/core-settings';
+import { CONNECTIONS_SETTINGS_GROUP } from '@cloudbeaver/core-connections';
+import { injectable } from '@cloudbeaver/core-di';
+import { ESettingsValueType, SettingsManagerService, SettingsProvider, SettingsProviderService } from '@cloudbeaver/core-settings';
 import { schema, schemaExtra } from '@cloudbeaver/core-utils';
 
 const defaultSettings = schema.object({
@@ -15,8 +16,8 @@ const defaultSettings = schema.object({
 
 export type PluginConnectionsSettings = schema.infer<typeof defaultSettings>;
 
-@injectable()
-export class PluginConnectionsSettingsService extends Dependency {
+@injectable(() => [SettingsProviderService, SettingsManagerService])
+export class PluginConnectionsSettingsService {
   get hideConnectionViewForUsers(): boolean {
     return this.settings.getValue('plugin.connections.hideConnectionViewForUsers');
   }
@@ -26,7 +27,6 @@ export class PluginConnectionsSettingsService extends Dependency {
     private readonly settingsProviderService: SettingsProviderService,
     private readonly settingsManagerService: SettingsManagerService,
   ) {
-    super();
     this.settings = this.settingsProviderService.createSettings(defaultSettings);
 
     this.registerSettings();
@@ -34,17 +34,17 @@ export class PluginConnectionsSettingsService extends Dependency {
 
   private registerSettings() {
     // todo: probably not working as a separate setting
-    // this.settingsManagerService.registerSettings(this.settings, () => [
-    //   {
-    //     key: 'plugin.connections.hideConnectionViewForUsers',
-    //     type: ESettingsValueType.Checkbox,
-    //     access: {
-    //       scope: ['server'],
-    //     },
-    //     name: 'plugin_connections_settings_hide_connections_view_name',
-    //     description: 'plugin_connections_settings_hide_connections_view_description',
-    //     group: CONNECTIONS_SETTINGS_GROUP,
-    //   },
-    // ]);
+    this.settingsManagerService.registerSettings<typeof defaultSettings>(() => [
+      {
+        key: 'plugin.connections.hideConnectionViewForUsers',
+        type: ESettingsValueType.Checkbox,
+        access: {
+          scope: ['role'],
+        },
+        name: 'plugin_connections_settings_hide_connections_view_name',
+        description: 'plugin_connections_settings_hide_connections_view_description',
+        group: CONNECTIONS_SETTINGS_GROUP,
+      },
+    ]);
   }
 }

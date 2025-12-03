@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,7 +10,7 @@ import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { CommonDialogService } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { LocalizationService } from '@cloudbeaver/core-localization';
-import { DATA_CONTEXT_NAV_NODE, ENodeFeature, NavTreeResource, NodeManagerUtils } from '@cloudbeaver/core-navigation-tree';
+import { DATA_CONTEXT_NAV_NODE, ENodeFeature, NavTreeResource } from '@cloudbeaver/core-navigation-tree';
 import { DATA_CONTEXT_MENU, MenuBaseItem, MenuService } from '@cloudbeaver/core-view';
 
 import { MENU_NAVIGATION_TREE_FILTERS } from './MENU_NAVIGATION_TREE_FILTERS.js';
@@ -19,7 +19,7 @@ const NavigationTreeFiltersDialog = importLazyComponent(() =>
   import('./NavigationTreeFiltersDialog/NavigationTreeFiltersDialog.js').then(m => m.NavigationTreeFiltersDialog),
 );
 
-@injectable()
+@injectable(() => [CommonDialogService, MenuService, LocalizationService, NavTreeResource, NotificationService])
 export class NavigationTreeFiltersBootstrap extends Bootstrap {
   constructor(
     private readonly commonDialogService: CommonDialogService,

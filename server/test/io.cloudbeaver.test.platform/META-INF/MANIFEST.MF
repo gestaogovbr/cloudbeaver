@@ -5,21 +5,23 @@ Bundle-SymbolicName: io.cloudbeaver.test.platform
 Bundle-Version: 1.0.0.qualifier
 Bundle-Release-Date: 20220606
 Bundle-Vendor: DBeaver Corp
-Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-ActivationPolicy: lazy
 Require-Bundle: org.eclipse.core.runtime,
  org.junit,
  org.mockito.mockito-core,
  org.apache.felix.scr,
  org.jkiss.dbeaver.model,
+ org.jkiss.dbeaver.osgi.test.runner;visibility:=reexport,
  org.jkiss.dbeaver.model.sql,
  org.jkiss.dbeaver.registry,
  org.jkiss.dbeaver.ext.generic,
  org.jkiss.dbeaver.ext.h2,
  org.jkiss.dbeaver.ext.postgresql,
- org.jkiss.bundle.jetty.websocket,
+ org.jkiss.bundle.jetty.server,
  io.cloudbeaver.model,
  io.cloudbeaver.server,
+ io.cloudbeaver.server.ce,
  io.cloudbeaver.resources.drivers.base,
  io.cloudbeaver.product.ce,
  io.cloudbeaver.service.auth,

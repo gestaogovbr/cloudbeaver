@@ -1,12 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
-  ['plugin_data_viewer_data_viewer_settings_group', '数据查看器'],
+  ['plugin_data_viewer_data_viewer_settings_group', '資料編輯器'],
   ['table_header_sql_expression', '输入SQL表达式以过滤结果'],
   ['table_header_sql_expression_not_supported', '不支持数据过滤器'],
   ['data_viewer_tab_title', '数据'],
@@ -25,7 +18,7 @@ export default [
   ['data_viewer_action_auto_refresh_menu_stop_tooltip', '停止自动刷新数据'],
   ['data_viewer_action_auto_refresh_menu_configure_tooltip', '配置自动刷新'],
   ['data_viewer_action_auto_refresh_interval_tooltip', '自动刷新间隔设置为 {arg:interval}'],
-  ['data_viewer_action_edit_delete', '删除选中'],
+  ['data_viewer_action_edit_delete', '删除选中行'],
   ['data_viewer_action_edit_add', '添加'],
   ['data_viewer_action_edit_add_copy', '复制并添加行'],
   ['data_viewer_action_edit_revert', '还原选中'],
@@ -64,12 +57,6 @@ export default [
   ['data_viewer_copy_not_allowed', '复制数据的功能已禁用'],
   ['data_viewer_copy_not_allowed_message', '如果这是意外的，请联系管理员'],
   ['settings_data_editor', '数据编辑器'],
-  ['settings_data_editor_disable_edit_name', '禁用编辑'],
-  ['settings_data_editor_disable_edit_description', '在数据查看器中为非管理员用户禁用数据编辑'],
-  ['settings_data_editor_disable_data_copy_name', '禁用复制'],
-  ['settings_data_editor_disable_data_copy_description', '在数据查看器中为非管理员用户禁用数据复制'],
-  ['settings_data_editor_disable_data_export_name', '禁用导出'],
-  ['settings_data_editor_disable_data_export_description', '在数据查看器中为非管理员用户禁用数据导出'],
   ['settings_data_editor_fetch_max_name', '最大查询数量'],
   ['settings_data_editor_fetch_max_description', '最大查询数据行数'],
   ['settings_data_editor_fetch_default_name', '默认查询数量'],

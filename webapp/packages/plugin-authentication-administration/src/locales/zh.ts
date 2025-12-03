@@ -1,11 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
+  ['authentication_administration_pages_label', '页面'],
   ['authentication_administration_user_connections_user_add', '创建用户'],
   ['authentication_administration_user_connections_user_new', '新用户'],
   ['authentication_administration_user_connections_access_load_fail', '用户授予的连接加载失败'],
@@ -76,7 +70,7 @@ export default [
   ],
 
   ['administration_identity_providers_tab_title', '身份提供者'],
-  ['administration_identity_providers_provider', '提供者'],
+  ['administration_identity_providers_provider', '提供者类型'],
   ['administration_identity_providers_provider_id', 'ID'],
   ['administration_identity_providers_provider_configuration_name', '配置名称'],
   ['administration_identity_providers_provider_configuration_disabled', '已禁用'],
@@ -124,4 +118,13 @@ export default [
 
   ['plugin_authentication_administration_team_form_edit_label', 'Team editing form'],
   ['plugin_authentication_administration_user_form_edit_label', 'User editing form'],
+
+  [
+    'plugin_authentication_administration_user_username_validation_error',
+    "User's name may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
+  [
+    'plugin_authentication_administration_team_id_validation_error',
+    "Team's ID may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
 ];

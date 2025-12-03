@@ -2,6 +2,8 @@
   "name": "@cloudbeaver/core-resource",
   "type": "module",
   "sideEffects": [
+    "./lib/module.js",
+    "./lib/index.js",
     "src/**/*.css",
     "src/**/*.scss",
     "public/**/*"
@@ -9,26 +11,31 @@
   "version": "0.1.0",
   "description": "",
   "license": "Apache-2.0",
-  "main": "dist/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./module": "./lib/module.js"
+  },
   "scripts": {
     "build": "tsc -b",
-    "clean": "rimraf --glob dist",
+    "clean": "rimraf --glob lib",
     "lint": "eslint ./src/ --ext .ts,.tsx",
-    "test": "core-cli-test",
-    "validate-dependencies": "core-cli-validate-dependencies",
-    "update-ts-references": "yarn run clean && typescript-resolve-references"
+    "test": "dbeaver-test",
+    "validate-dependencies": "core-cli-validate-dependencies"
   },
   "dependencies": {
-    "@cloudbeaver/core-di": "^0",
-    "@cloudbeaver/core-executor": "^0",
-    "@cloudbeaver/core-utils": "^0",
-    "mobx": "^6"
+    "@cloudbeaver/core-executor": "workspace:*",
+    "@cloudbeaver/core-utils": "workspace:*",
+    "mobx": "^6",
+    "tslib": "^2"
   },
   "devDependencies": {
-    "@jest/globals": "^29",
-    "@types/jest": "^29",
+    "@cloudbeaver/core-cli": "workspace:*",
+    "@cloudbeaver/tsconfig": "workspace:*",
+    "@dbeaver/cli": "workspace:*",
+    "@dbeaver/react-tests": "workspace:*",
     "mobx": "^6",
-    "typescript": "^5"
-  },
-  "peerDependencies": {}
+    "rimraf": "^6",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
 }

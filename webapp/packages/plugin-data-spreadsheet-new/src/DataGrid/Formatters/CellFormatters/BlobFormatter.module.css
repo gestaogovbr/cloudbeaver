@@ -9,18 +9,5 @@
 .blobFormatter {
   display: flex;
   align-items: center;
-  &:not(.nullValue) {
-    color: var(--theme-primary);
-  }
-}
-
-.blobFormatterValue {
-  text-transform: uppercase;
-  overflow: hidden;
-  white-space: pre;
-  text-overflow: ellipsis;
-}
-
-.nullValue {
-  composes: nullValue from './CellNullValue.module.css';
+  color: var(--theme-primary);
 }

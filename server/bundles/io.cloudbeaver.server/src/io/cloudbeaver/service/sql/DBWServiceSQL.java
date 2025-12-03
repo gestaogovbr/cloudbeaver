@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@
  */
 package io.cloudbeaver.service.sql;
 
+import io.cloudbeaver.DBWConstants;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebAction;
+import io.cloudbeaver.WebObjectId;
 import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.WebConnectionInfo;
+import io.cloudbeaver.model.WebTransactionLogInfo;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.service.DBWService;
 import org.jkiss.code.NotNull;
@@ -89,15 +92,18 @@ public interface DBWServiceSQL extends DBWService {
     @WebAction
     void setContextDefaults(@NotNull WebSQLContextInfo sqlContext, String catalogName, String schemaName) throws DBWebException;
 
-    @WebAction
+    @WebAction(requireGlobalPermissions = DBWConstants.GLOBAL_PERMISSION_SCRIPT_EXECUTE)
     WebAsyncTaskInfo asyncExecuteQuery(
+        @NotNull WebSession webSession,
+        @WebObjectId @NotNull String projectId,
         @NotNull WebSQLContextInfo contextInfo,
         @NotNull String sql,
         @Nullable String resultId,
         @Nullable WebSQLDataFilter filter,
         @Nullable WebDataFormat dataFormat,
         boolean readLogs,
-        @NotNull WebSession webSession) throws DBException;
+        boolean useEvents
+    ) throws DBException;
 
     @WebAction
     WebAsyncTaskInfo asyncReadDataFromContainer(
@@ -121,14 +127,37 @@ public interface DBWServiceSQL extends DBWService {
     @WebAction
     Boolean closeResult(@NotNull WebSQLContextInfo sqlContext, @NotNull String resultId) throws DBWebException;
 
-    @WebAction
+    /**
+     * Updates result set data (sync function).
+     */
+    @WebAction(requireGlobalPermissions = DBWConstants.GLOBAL_PERMISSION_DATA_EDITOR_EDITING)
+    @Deprecated // use async function
     WebSQLExecuteInfo updateResultsDataBatch(
         @NotNull WebSQLContextInfo contextInfo,
         @NotNull String resultsId,
         @Nullable List<WebSQLResultsRow> updatedRows,
         @Nullable List<WebSQLResultsRow> deletedRows,
-        @Nullable List<WebSQLResultsRow> addedRows, WebDataFormat dataFormat) throws DBWebException;
+        @Nullable List<WebSQLResultsRow> addedRows,
+        @Nullable WebDataFormat dataFormat
+    ) throws DBWebException;
 
+    /**
+     * Creates async task for updating results data.
+     */
+    @WebAction(requireGlobalPermissions = DBWConstants.GLOBAL_PERMISSION_DATA_EDITOR_EDITING)
+    WebAsyncTaskInfo asyncUpdateResultsDataBatch(
+        @NotNull WebSession webSession,
+        @NotNull WebSQLContextInfo contextInfo,
+        @NotNull String resultsId,
+        @Nullable List<WebSQLResultsRow> updatedRows,
+        @Nullable List<WebSQLResultsRow> deletedRows,
+        @Nullable List<WebSQLResultsRow> addedRows,
+        @Nullable WebDataFormat dataFormat
+    ) throws DBWebException;
+
+    /**
+     * Reads cell LOB value from result set.
+     */
     @WebAction
     String readLobValue(
         @NotNull WebSQLContextInfo contextInfo,
@@ -144,7 +173,7 @@ public interface DBWServiceSQL extends DBWService {
         @NotNull Integer lobColumnIndex,
         @NotNull WebSQLResultsRow row) throws DBWebException;
 
-    @WebAction
+    @WebAction(requireGlobalPermissions = DBWConstants.GLOBAL_PERMISSION_DATA_EDITOR_EDITING)
     String updateResultsDataBatchScript(
         @NotNull WebSQLContextInfo contextInfo,
         @NotNull String resultsId,
@@ -202,4 +231,10 @@ public interface DBWServiceSQL extends DBWService {
     WebAsyncTaskInfo asyncSqlCommitTransaction(
         @NotNull WebSession webSession,
         @NotNull WebSQLContextInfo sqlContext);
+
+    @WebAction
+    WebTransactionLogInfo getTransactionLogInfo(
+        @NotNull WebSession webSession,
+        @NotNull WebSQLContextInfo sqlContext
+    );
 }

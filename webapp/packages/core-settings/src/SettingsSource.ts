@@ -1,71 +1,33 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { action, makeObservable, observable } from 'mobx';
+import { action, makeObservable } from 'mobx';
 
 import { type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
-import { isNotNullDefined } from '@cloudbeaver/core-utils';
 
 import type { ISettingChangeData, ISettingsSource } from './ISettingsSource.js';
 
 export abstract class SettingsSource implements ISettingsSource {
   readonly onChange: ISyncExecutor<ISettingChangeData>;
   private updating: boolean;
-  protected readonly changes: Map<any, any>;
   constructor() {
     this.onChange = new SyncExecutor();
     this.updating = false;
-    this.changes = new Map();
 
-    makeObservable<this, 'update' | 'changes'>(this, {
-      changes: observable.shallow,
+    makeObservable<this, 'update'>(this, {
       update: action,
     });
   }
 
-  has(key: any): boolean {
-    return this.changes.has(key);
-  }
-
-  isEdited(key?: any): boolean {
-    if (isNotNullDefined(key)) {
-      return this.changes.has(key);
-    }
-
-    return this.changes.size > 0;
-  }
-
   protected abstract getSnapshot(): Record<string, any>;
-  abstract isReadOnly(key: any): boolean;
+  abstract has(key: any): boolean;
   abstract getValue(key: any): any;
-  abstract save(): Promise<void>;
 
-  clear(): void {
-    this.changes.clear();
-  }
-
-  getEditedValue(key: any): any {
-    if (this.changes.has(key)) {
-      return this.changes.get(key);
-    }
-
-    return this.getValue(key);
-  }
-
-  setValue(key: any, value: any): void {
-    const currentValue = this.getValue(key);
-    if (currentValue === value || (!isNotNullDefined(currentValue) && value === null)) {
-      this.changes.delete(key);
-    } else {
-      this.changes.set(key, value);
-    }
-  }
-
-  protected update(action: () => void) {
+  protected update(action: () => void): void {
     if (this.updating) {
       action();
       return;

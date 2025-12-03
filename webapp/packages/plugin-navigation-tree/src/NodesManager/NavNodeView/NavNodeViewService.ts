@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,13 +9,12 @@ import { untracked } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { NavTreeResource } from '@cloudbeaver/core-navigation-tree';
 
 import type { INavNodeFolderTransform, NavNodeFolderTransformFn, NavNodeTransformView } from './IFolderTransform.js';
 
 export interface INodeDuplicateList {
-  nodes: string[];
-  duplicates: string[];
+  nodes: Set<string>;
+  duplicates: Set<string>;
 }
 
 export interface INodeLimitedList {
@@ -23,7 +22,7 @@ export interface INodeLimitedList {
   truncated: number;
 }
 
-@injectable()
+@injectable(() => [NotificationService])
 export class NavNodeViewService {
   get tabs(): NavNodeTransformView[] {
     return this.transformers
@@ -46,7 +45,7 @@ export class NavNodeViewService {
   private readonly transformers: INavNodeFolderTransform[];
   private readonly duplicationNotify: Set<string>;
 
-  constructor(private readonly navTreeResource: NavTreeResource, private readonly notificationService: NotificationService) {
+  constructor(private readonly notificationService: NotificationService) {
     this.transformers = [];
     this.duplicationNotify = new Set();
 
@@ -60,10 +59,10 @@ export class NavNodeViewService {
         const { nodes, duplicates } = this.filterDuplicates(children);
 
         untracked(() => {
-          this.logDuplicates(nodeId, duplicates);
+          this.logDuplicates(nodeId, Array.from(duplicates));
         });
 
-        return nodes;
+        return Array.from(nodes);
       },
     });
   }
@@ -81,25 +80,24 @@ export class NavNodeViewService {
   }
 
   filterDuplicates(nodes: string[]): INodeDuplicateList {
+    const seen = new Set<string>();
+    const duplicatesSet = new Set<string>();
     const nextChildren: string[] = [];
-    const duplicates: string[] = [];
 
     for (const child of nodes) {
-      const isDuplicate = duplicates.includes(child);
-
-      if (nextChildren.includes(child) || isDuplicate) {
-        if (!isDuplicate) {
-          duplicates.push(child);
-          nextChildren.splice(nextChildren.indexOf(child), 1);
-        }
+      if (seen.has(child)) {
+        duplicatesSet.add(child);
       } else {
+        seen.add(child);
         nextChildren.push(child);
       }
     }
 
+    const uniqueChildren = new Set(nextChildren.filter(child => !duplicatesSet.has(child)));
+
     return {
-      nodes: nextChildren,
-      duplicates,
+      nodes: uniqueChildren,
+      duplicates: duplicatesSet,
     };
   }
 

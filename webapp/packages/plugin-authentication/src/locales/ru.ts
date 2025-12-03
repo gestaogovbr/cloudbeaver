@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['authentication_login_dialog_title', 'Аутентификация'],
   ['authentication_login', 'Войти'],
@@ -23,7 +16,7 @@ export default [
   ['authentication_provider_disabled', 'Способ аутентификации отключен'],
   ['authentication_request_token', 'Необходима дополнительная аутентификация'],
   ['authentication_identity_provider_search_placeholder', 'Поиск по имени или описанию конфигурации...'],
-  ['authentication_identity_provider_dialog_subtitle', 'Выберите конфигурацию с помощью которой вы хотите войти'],
+  ['authentication_identity_provider_dialog_subtitle', 'Выберите конфигурацию, с помощью которой вы хотите войти'],
 
   ['authentication_user_name', 'Имя'],
   ['authentication_user_name_description', 'Идентификатор пользователя хранится в нижнем регистре'],

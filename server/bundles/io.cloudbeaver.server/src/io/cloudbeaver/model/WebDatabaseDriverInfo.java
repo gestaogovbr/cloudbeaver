@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,17 +18,11 @@ package io.cloudbeaver.model;
 
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebServiceUtils;
-import io.cloudbeaver.model.config.CBAppConfig;
 import io.cloudbeaver.model.session.WebSession;
-import io.cloudbeaver.model.utils.ConfigurationUtils;
-import io.cloudbeaver.server.CBApplication;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBConstants;
-import org.jkiss.dbeaver.model.connection.DBPAuthModelDescriptor;
-import org.jkiss.dbeaver.model.connection.DBPConnectionConfiguration;
-import org.jkiss.dbeaver.model.connection.DBPDriver;
-import org.jkiss.dbeaver.model.connection.DBPDriverConfigurationType;
+import org.jkiss.dbeaver.model.connection.*;
 import org.jkiss.dbeaver.model.impl.auth.AuthModelDatabaseNative;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyDescriptor;
@@ -53,7 +47,7 @@ public class WebDatabaseDriverInfo {
     public static final String URL_DATABASE_FIELD = ".*(?:\\{(?:database|file|folder)}).*";
     private final WebSession webSession;
     private final DBPDriver driver;
-    private String id;
+    private final String id;
 
     public WebDatabaseDriverInfo(WebSession webSession, DBPDriver driver) {
         this.webSession = webSession;
@@ -84,6 +78,11 @@ public class WebDatabaseDriverInfo {
     @Property
     public String getIconBig() {
         return WebServiceUtils.makeIconId(driver.getIconBig());
+    }
+
+    @Property
+    public String getDriverId() {
+        return driver.getId();
     }
 
     @Property
@@ -181,7 +180,7 @@ public class WebDatabaseDriverInfo {
     public WebPropertyInfo[] getDriverProperties() throws DBWebException {
         try {
             DBPConnectionConfiguration cfg = new DBPConnectionConfiguration();
-            cfg.setUrl(driver.getSampleURL());
+            cfg.setUrl(CommonUtils.notEmpty(driver.getSampleURL()));
             cfg.setHostName(DBConstants.HOST_LOCALHOST);
             cfg.setHostPort(driver.getDefaultPort());
             cfg.setDatabaseName(driver.getDefaultDatabase());
@@ -198,7 +197,7 @@ public class WebDatabaseDriverInfo {
             return Arrays.stream(properties)
                 .map(p -> new WebPropertyInfo(webSession, p, propertySource)).toArray(WebPropertyInfo[]::new);
         } catch (DBException e) {
-            log.error("Error reading driver properties", e);
+            log.error("Error reading driver properties:\n" + e.getMessage());
             return new WebPropertyInfo[0];
         }
     }
@@ -258,14 +257,13 @@ public class WebDatabaseDriverInfo {
             .toArray(WebPropertyInfo[]::new);
     }
 
+    public WebPropertyInfo[] getExpertSettingsProperties() {
+        return WebServiceUtils.getObjectFilteredProperties(webSession, new WebExpertSettingsProperties(driver), null);
+    }
+
     @Property
     public boolean isEnabled() {
-        CBAppConfig config = CBApplication.getInstance().getAppConfiguration();
-        return ConfigurationUtils.isDriverEnabled(
-            driver,
-            config.getEnabledDrivers(),
-            config.getDisabledDrivers()
-            );
+        return WebServiceUtils.isDriverEnabled(driver);
     }
 
     @Property
@@ -291,12 +289,28 @@ public class WebDatabaseDriverInfo {
     @Property
     public WebDriverLibraryInfo[] getDriverLibraries() {
         return driver.getDriverLibraries().stream()
-            .map(dbpDriverLibrary -> new WebDriverLibraryInfo(webSession, dbpDriverLibrary))
+            .filter(library -> !library.isDisabled())
+            .map(library -> new WebDriverLibraryInfo(driver, library))
             .toArray(WebDriverLibraryInfo[]::new);
+    }
+
+    @Property
+    public boolean isDriverInstalled() {
+        return driver.getDefaultDriverLoader().isDriverInstalled();
+    }
+
+    @Property
+    public boolean isDownloadable() {
+        return driver.getDriverLibraries().stream().anyMatch(DBPDriverLibrary::isDownloadable);
     }
 
     @Property
     public boolean getUseCustomPage() {
         return !ArrayUtils.isEmpty(driver.getMainPropertyDescriptors());
+    }
+
+    @Property
+    public boolean isSafeEmbeddedDriver() {
+        return CommonUtils.toBoolean(driver.getDriverParameter(DBConstants.PARAM_SAFE_EMBEDDED_DRIVER));
     }
 }

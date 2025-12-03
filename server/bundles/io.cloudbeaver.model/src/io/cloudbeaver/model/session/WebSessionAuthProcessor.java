@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,11 +20,11 @@ package io.cloudbeaver.model.session;
 import io.cloudbeaver.DBWUserIdentity;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.auth.SMAuthProviderExternal;
-import io.cloudbeaver.model.app.WebAuthConfiguration;
+import io.cloudbeaver.model.app.ServletAuthConfiguration;
 import io.cloudbeaver.model.user.WebUser;
 import io.cloudbeaver.registry.WebAuthProviderDescriptor;
 import io.cloudbeaver.registry.WebAuthProviderRegistry;
-import io.cloudbeaver.utils.WebAppUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
@@ -82,7 +82,7 @@ public class WebSessionAuthProcessor {
 
     @SuppressWarnings("unchecked")
     private List<WebAuthInfo> finishWebSessionAuthorization(SMAuthInfo authInfo) throws DBException {
-        boolean configMode = WebAppUtils.getWebApplication().isConfigurationMode();
+        boolean configMode = ServletAppUtils.getServletApplication().isConfigurationMode();
         boolean alreadyLoggedIn = webSession.getUser() != null;
         boolean resetUserStateOnError = !alreadyLoggedIn;
 
@@ -118,6 +118,8 @@ public class WebSessionAuthProcessor {
                     // We may need to associate new credentials with active user
                     if (linkWithActiveUser) {
                         securityController.setCurrentUserCredentials(authProviderDescriptor.getId(), authAttrs);
+                        //link only first(main) credentials
+                        alreadyLoggedIn = true;
                     }
                 }
 
@@ -127,7 +129,7 @@ public class WebSessionAuthProcessor {
 
                 DBWUserIdentity userIdentity = null;
                 var providerConfigId = authConfiguration.getAuthProviderConfigurationId();
-                var providerConfig = WebAppUtils.getWebAuthApplication()
+                var providerConfig = ServletAppUtils.getAuthApplication()
                     .getAuthConfiguration()
                     .getAuthProviderConfiguration(providerConfigId);
                 if (authProviderExternal != null) {
@@ -194,7 +196,8 @@ public class WebSessionAuthProcessor {
     }
 
     private boolean isProviderEnabled(@NotNull String providerId) {
-        WebAuthConfiguration appConfiguration = (WebAuthConfiguration) WebAppUtils.getWebApplication().getAppConfiguration();
+        ServletAuthConfiguration appConfiguration = (ServletAuthConfiguration) ServletAppUtils.getServletApplication()
+            .getAppConfiguration();
         return appConfiguration.isAuthProviderEnabled(providerId);
     }
 }

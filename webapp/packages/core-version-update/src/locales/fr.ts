@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['version_update', 'Mise à jour de version'],
   ['version_update_version_is_up_to_date', 'La version est à jour'],
@@ -16,4 +9,5 @@ export default [
   ['version_update_info', 'Info'],
   ['version_update_instruction', 'To update version, please follow'],
   ['version_update_instruction_link', 'the instructions'],
+  ['version_update_instruction_link_not_provided', 'Instructions link is not provided. Please contact support.'],
 ];

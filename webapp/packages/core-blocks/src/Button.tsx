@@ -1,22 +1,20 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+import { createElement } from 'react';
 import { observable } from 'mobx';
 import { observer } from 'mobx-react-lite';
+import { Button as UIKitButton, ButtonIcon } from '@dbeaver/ui-kit';
 
-import style from './Button.module.css';
 import { IconOrImage } from './IconOrImage.js';
-import { Loader } from './Loader/Loader.js';
-import { s } from './s.js';
 import { useObjectRef } from './useObjectRef.js';
 import { useObservableRef } from './useObservableRef.js';
-import { useS } from './useS.js';
 
-type ButtonMod = Array<'raised' | 'unelevated' | 'outlined' | 'secondary'>;
+import './Button.css';
 
 export type ButtonProps = (React.ButtonHTMLAttributes<HTMLButtonElement | HTMLAnchorElement> &
   React.LinkHTMLAttributes<HTMLLinkElement | HTMLButtonElement> &
@@ -24,7 +22,10 @@ export type ButtonProps = (React.ButtonHTMLAttributes<HTMLButtonElement | HTMLAn
   loading?: boolean;
   icon?: string;
   viewBox?: string;
-  mod?: ButtonMod;
+  iconPlacement?: 'start' | 'end';
+  iconSize?: number;
+  variant?: 'primary' | 'secondary' | 'danger';
+  size?: 'small' | 'medium' | 'large';
   tag?: 'button' | 'a' | 'div';
   href?: string;
   target?: '_blank' | '_self' | '_parent' | '_top';
@@ -37,7 +38,6 @@ export const Button = observer<ButtonProps>(function Button({
   children,
   icon,
   viewBox,
-  mod,
   tag = 'button',
   type = 'button',
   disabled = false,
@@ -45,9 +45,10 @@ export const Button = observer<ButtonProps>(function Button({
   loader,
   onClick,
   className,
+  iconPlacement,
+  iconSize = 16,
   ...rest
 }) {
-  const styles = useS(style);
   const handlersRef = useObjectRef({ onClick });
   const state = useObservableRef(
     () => ({
@@ -78,36 +79,15 @@ export const Button = observer<ButtonProps>(function Button({
     disabled = true;
   }
 
-  const Button = tag;
+  const Tag = createElement(tag);
   return (
-    <Button
-      role="button"
-      tabIndex={0}
-      {...rest}
-      type={type}
-      disabled={disabled}
-      className={s(
-        styles,
-        {
-          button: true,
-          raised: mod?.includes('raised'),
-          outlined: mod?.includes('outlined'),
-          secondary: mod?.includes('secondary'),
-          unelevated: mod?.includes('unelevated'),
-          loading,
-        },
-        className,
-      )}
-      onClick={state.click}
-    >
-      <div className={s(styles, { ripple: true })} />
+    <UIKitButton render={Tag} {...rest} loading={loading} type={type} disabled={disabled} className={className} onClick={state.click}>
       {icon && (
-        <div className={s(styles, { buttonIcon: true, disabled })}>
-          <IconOrImage icon={icon} viewBox={viewBox} />
-        </div>
+        <ButtonIcon placement={iconPlacement}>
+          <IconOrImage width={iconSize} icon={icon} viewBox={viewBox} />
+        </ButtonIcon>
       )}
-      <span className={s(styles, { buttonLabel: true })}>{children}</span>
-      <Loader className={s(styles, { loader: true })} small />
-    </Button>
+      {children}
+    </UIKitButton>
   );
 });

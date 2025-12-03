@@ -20,6 +20,7 @@
         <resource name="drivers/kyuubi"/>
         <resource name="drivers/teiid" />
         <resource name="drivers/impala"/>
+        <resource name="drivers/databend"/>
     </extension>
 
     <!-- Bundles  -->
@@ -42,6 +43,7 @@
         <bundle id="drivers.kyuubi" label="Apache Kyuubi drivers"/>
         <bundle id="drivers.teiid" label="Teiid drivers"/>
         <bundle id="drivers.impala" label="Impala drivers"/>
+        <bundle id="drivers.databend" label="Databend drivers"/>
     </extension>
 
     <!-- Enabled drivers -->
@@ -65,6 +67,7 @@
         <driver id="generic:kyuubi_hive"/>
         <driver id="generic:teiid"/>
         <driver id="generic:cloudera_impala"/>
+        <driver id="databend:databend"/>
     </extension>
 
 

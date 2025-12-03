@@ -8,12 +8,12 @@
 import { observer } from 'mobx-react-lite';
 import React, { forwardRef, useContext } from 'react';
 
-import { getComputed, s, TreeNodeContext, TreeNodeControl, TreeNodeName, useMouseContextMenu, useS } from '@cloudbeaver/core-blocks';
+import { getComputed, s, TreeNodeContext, TreeNodeControl, TreeNodeName, useContextMenuPosition, useS } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { EventContext, EventStopPropagationFlag } from '@cloudbeaver/core-events';
 import { NavNodeInfoResource } from '@cloudbeaver/core-navigation-tree';
 import { ProjectInfoResource } from '@cloudbeaver/core-projects';
-import { NAV_NODE_TYPE_RM_PROJECT } from '@cloudbeaver/core-resource-manager';
+import { isRMProjectNode } from '@cloudbeaver/core-resource-manager';
 import { CaptureViewContext } from '@cloudbeaver/core-view';
 import {
   ElementsTreeContext,
@@ -31,7 +31,7 @@ import style from './NavigationNodeProjectControl.module.css';
 export const NavigationNodeProjectControl: NavTreeControlComponent = observer<NavTreeControlProps, HTMLDivElement>(
   forwardRef(function NavigationNodeProjectControl({ node, dndElement, dndPlaceholder, className }, ref) {
     const styles = useS(style);
-    const mouseContextMenu = useMouseContextMenu();
+    const contextMenuPosition = useContextMenuPosition();
     const viewContext = useContext(CaptureViewContext);
     const elementsTreeContext = useContext(ElementsTreeContext);
     const treeNodeContext = useContext(TreeNodeContext);
@@ -60,7 +60,7 @@ export const NavigationNodeProjectControl: NavTreeControlComponent = observer<Na
     }
 
     function handleContextMenuOpen(event: React.MouseEvent<HTMLDivElement>) {
-      mouseContextMenu.handleContextMenuOpen(event);
+      contextMenuPosition.handleContextMenuOpen(event);
       treeNodeContext.select();
     }
 
@@ -69,7 +69,7 @@ export const NavigationNodeProjectControl: NavTreeControlComponent = observer<Na
     }
 
     if (node.projectId && resourceType !== undefined) {
-      if (node.nodeType === NAV_NODE_TYPE_RM_PROJECT) {
+      if (isRMProjectNode(node)) {
         const project = projectInfoResource.get(node.projectId);
         if (project) {
           const resourceFolder = resourceManagerService.getRootFolder(project, resourceType);
@@ -104,7 +104,7 @@ export const NavigationNodeProjectControl: NavTreeControlComponent = observer<Na
         </TreeNodeName>
         {!dndPlaceholder && (
           <div className={s(styles, { portal: true })} onClick={handlePortalClick}>
-            <TreeNodeMenuLoader mouseContextMenu={mouseContextMenu} node={node} selected={selected} />
+            <TreeNodeMenuLoader contextMenuPosition={contextMenuPosition} node={node} selected={selected} />
           </div>
         )}
       </TreeNodeControl>

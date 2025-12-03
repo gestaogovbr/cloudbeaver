@@ -9,6 +9,7 @@
 .textFormatter {
   display: flex;
   align-items: center;
+  overflow: hidden;
 
   & .a {
     display: flex;
@@ -32,8 +33,4 @@
 .textFormatterValue {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.nullValue {
-  composes: nullValue from './CellNullValue.module.css';
 }

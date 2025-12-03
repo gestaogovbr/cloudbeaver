@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ import { RouterService } from '@cloudbeaver/core-routing';
 
 import { SessionExpiredDialog } from './SessionExpiredDialog.js';
 
-@injectable()
+@injectable(() => [RouterService, NotificationService, CommonDialogService, SessionExpireService])
 export class SessionExpiredDialogBootstrap extends Bootstrap {
   constructor(
     private readonly routerService: RouterService,
@@ -30,9 +30,9 @@ export class SessionExpiredDialogBootstrap extends Bootstrap {
   }
 
   private async handleSessionExpired(): Promise<void> {
-    const state = await this.commonDialogService.open(SessionExpiredDialog, null);
+    const { status } = await this.commonDialogService.open(SessionExpiredDialog, null);
 
-    if (state === DialogueStateResult.Rejected) {
+    if (status === DialogueStateResult.Rejected) {
       this.notificationService.customNotification(
         () => ActionSnackbar,
         {

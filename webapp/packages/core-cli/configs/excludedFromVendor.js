@@ -1,8 +1,7 @@
 module.exports = [
   'react-data-grid',
   'react-markdown',
-  'react-virtualized',
-  'react-window',
+  'virtua',
   'react-dnd',
   'react-dnd-html5-backend',
   '@popperjs',
@@ -13,7 +12,7 @@ module.exports = [
   'joint',
   'backbone',
   'lodash',
-  'canvg',
+  'modern-screenshot',
   'dagre',
   'svg-pathdata',
   '@emotion',

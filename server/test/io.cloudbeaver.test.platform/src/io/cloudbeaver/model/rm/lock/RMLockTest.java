@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
  */
 package io.cloudbeaver.model.rm.lock;
 
-import io.cloudbeaver.test.platform.CEServerTestSuite;
+import io.cloudbeaver.CloudbeaverMockTest;
+import io.cloudbeaver.app.CEAppStarter;
 import org.jkiss.dbeaver.Log;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.*;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -31,15 +31,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class RMLockTest {
+public class RMLockTest extends CloudbeaverMockTest {
     private static final Log log = Log.getLog(RMLockTest.class);
     private final String project1 = "s_fakeProject1";
     private final String project2 = "s_fakeProject2";
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private static final ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    @AfterClass
+    public static void shutdown() {
+        executor.shutdown();
+    }
+
+    @BeforeClass
+    public static void startServer() throws Exception {
+        CEAppStarter.startServerIfNotStarted();
+    }
 
     @Test
     public void testProjectAccessUsingSeveralControllers() throws Throwable {
-        var lockController1 = new TestLockController(CEServerTestSuite.getTestApp(), 1);
+        var lockController1 = new TestLockController(CEAppStarter.getTestApp(), 1);
 
         CountDownLatch thread1CDL = new CountDownLatch(1);
         CountDownLatch thread2CDL = new CountDownLatch(1);
@@ -49,7 +59,7 @@ public class RMLockTest {
         AtomicReference<Throwable> exceptionReference = new AtomicReference<>();
 
         Runnable runnable1 = () -> {
-            try (var lock = lockController1.lockProject(project1, "testThatProjectLocked1")) {
+            try (var lock = lockController1.lock(project1, "testThatProjectLocked1")) {
                 isLockedByThread1.set(true);
                 thread2CDL.countDown();
                 thread1CDL.await(1, TimeUnit.MINUTES);
@@ -63,7 +73,7 @@ public class RMLockTest {
         };
 
         int atLeastWaitCalls = 1;
-        var lockController2 = Mockito.spy(new TestLockController(CEServerTestSuite.getTestApp(), 1000));
+        var lockController2 = Mockito.spy(new TestLockController(CEAppStarter.getTestApp(), 1000));
         Mockito.doAnswer(new Answer() {
             private int count = 0;
 
@@ -76,15 +86,15 @@ public class RMLockTest {
                 }
                 return invocationOnMock.callRealMethod();
             }
-        }).when(lockController2).awaitingUnlock(Mockito.any(), Mockito.any());
+        }).when(lockController2).awaitingUnlock(Mockito.any());
         Runnable runnable2 = () -> {
             try {
                 thread2CDL.await(1, TimeUnit.MINUTES);
                 Assert.assertTrue("Project not locket by thread 1", isLockedByThread1.get());
-                Assert.assertTrue("Project not locked", lockController2.isProjectLocked(project1));
-                try (var lock = lockController2.lockProject(project1, "testThatProjectLocked2")) {
+                Assert.assertTrue("Project not locked", lockController2.isFileLocked(project1));
+                try (var lock = lockController2.lock(project1, "testThatProjectLocked2")) {
                     //that we were really waiting for the file and the lock was not removed earlier
-                    Mockito.verify(lockController2, Mockito.atLeast(atLeastWaitCalls)).awaitingUnlock(Mockito.any(), Mockito.any());
+                    Mockito.verify(lockController2, Mockito.atLeast(atLeastWaitCalls)).awaitingUnlock(Mockito.any());
                 }
             } catch (Throwable e) {
                 log.error(e);
@@ -100,12 +110,12 @@ public class RMLockTest {
         if (exceptionReference.get() != null) {
             throw exceptionReference.get();
         }
-        Assert.assertFalse(lockController2.isProjectLocked(project1));
+        Assert.assertFalse(lockController2.isFileLocked(project1));
     }
 
     @Test
     public void testAccessToDifferentProjects() throws Throwable {
-        var lockController1 = new TestLockController(CEServerTestSuite.getTestApp(), 1);
+        var lockController1 = new TestLockController(CEAppStarter.getTestApp(), 1);
 
         CountDownLatch thread1CDL = new CountDownLatch(1);
         CountDownLatch thread2CDL = new CountDownLatch(1);
@@ -116,7 +126,7 @@ public class RMLockTest {
         AtomicBoolean isLockedByThread2 = new AtomicBoolean(false);
         AtomicReference<Throwable> exceptionReference = new AtomicReference<>();
         Runnable runnable1 = () -> {
-            try (var lock = lockController1.lockProject(project1, "testAccessToDifferentProjects1")) {
+            try (var lock = lockController1.lock(project1, "testAccessToDifferentProjects1")) {
                 isLockedByThread1.set(true);
                 thread2InitCDL.countDown();
                 thread1CDL.await(1, TimeUnit.MINUTES);
@@ -131,10 +141,10 @@ public class RMLockTest {
             }
         };
 
-        var lockController2 = new TestLockController(CEServerTestSuite.getTestApp(), 1);
+        var lockController2 = new TestLockController(CEAppStarter.getTestApp(), 1);
         Runnable runnable2 = () -> {
             try {
-                try (var lock = lockController2.lockProject(project2, "testAccessToDifferentProjects2")) {
+                try (var lock = lockController2.lock(project2, "testAccessToDifferentProjects2")) {
                     thread2InitCDL.await();
                     Assert.assertTrue("Project1 not locket by thread1", isLockedByThread1.get());
                     isLockedByThread2.set(true);
@@ -157,13 +167,13 @@ public class RMLockTest {
             throw exceptionReference.get();
         }
 
-        Assert.assertFalse(lockController2.isProjectLocked(project1));
-        Assert.assertFalse(lockController2.isProjectLocked(project2));
+        Assert.assertFalse(lockController2.isFileLocked(project1));
+        Assert.assertFalse(lockController2.isFileLocked(project2));
     }
 
     @Test
     public void testForceUnlock() throws Throwable {
-        var lockController1 = new TestLockController(CEServerTestSuite.getTestApp(), 1);
+        var lockController1 = new TestLockController(CEAppStarter.getTestApp(), 1);
 
         CountDownLatch thread1CDL = new CountDownLatch(1);
         CountDownLatch globalCountDown = new CountDownLatch(2);
@@ -171,7 +181,7 @@ public class RMLockTest {
         AtomicBoolean isLockedByThread1 = new AtomicBoolean(false);
         AtomicReference<Throwable> exceptionReference = new AtomicReference<>();
         Runnable runnable1 = () -> {
-            try (var lock = lockController1.lockProject(project1, "testForceUnlock1")) {
+            try (var lock = lockController1.lock(project1, "testForceUnlock1")) {
                 isLockedByThread1.set(true);
                 thread1CDL.await(1, TimeUnit.MINUTES);
             } catch (Throwable e) {
@@ -183,10 +193,10 @@ public class RMLockTest {
             }
         };
 
-        var lockController2 = Mockito.spy(new TestLockController(CEServerTestSuite.getTestApp(), 100));
+        var lockController2 = Mockito.spy(new TestLockController(CEAppStarter.getTestApp(), 100));
         Runnable runnable2 = () -> {
             try {
-                try (var lock = lockController2.lockProject(project1, "testForceUnlock2")) {
+                try (var lock = lockController2.lock(project1, "testForceUnlock2")) {
                     Assert.assertTrue("Project1 not locket by thread1", isLockedByThread1.get());
                     Mockito.verify(lockController2, Mockito.atLeast(5)).isLocked(Mockito.any());
                     thread1CDL.countDown();
@@ -205,6 +215,6 @@ public class RMLockTest {
         if (exceptionReference.get() != null) {
             throw exceptionReference.get();
         }
-        Assert.assertFalse(lockController2.isProjectLocked(project1));
+        Assert.assertFalse(lockController2.isFileLocked(project1));
     }
 }

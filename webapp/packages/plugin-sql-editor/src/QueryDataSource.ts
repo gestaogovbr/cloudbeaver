@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,13 +10,14 @@ import { makeObservable, observable } from 'mobx';
 import type { IConnectionExecutionContextInfo } from '@cloudbeaver/core-connections';
 import type { IServiceProvider } from '@cloudbeaver/core-di';
 import type { ITask } from '@cloudbeaver/core-executor';
+import { AsyncTaskInfoService } from '@cloudbeaver/core-root';
 import {
-  AsyncTaskInfoService,
   GraphQLService,
   ResultDataFormat,
   type SqlExecuteInfo,
   type SqlQueryResults,
-  type UpdateResultsDataBatchMutationVariables,
+  type AsyncUpdateResultsDataBatchMutationVariables,
+  type AsyncTaskInfo,
 } from '@cloudbeaver/core-sdk';
 import { uuid } from '@cloudbeaver/core-utils';
 import {
@@ -81,7 +82,9 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
   }
 
   async save(prevResults: IDatabaseResultSet[]): Promise<IDatabaseResultSet[]> {
-    if (!this.options || !this.executionContext?.context) {
+    const executionContext = this.executionContext;
+
+    if (!this.options || !executionContext?.context) {
       return prevResults;
     }
 
@@ -91,13 +94,13 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
           continue;
         }
 
-        const executionContextInfo = this.executionContext.context;
+        const executionContextInfo = executionContext.context;
         const projectId = this.options.connectionKey.projectId;
         const connectionId = this.options.connectionKey.connectionId;
         const contextId = executionContextInfo.id;
         const resultsId = result.id;
 
-        const updateVariables: UpdateResultsDataBatchMutationVariables = {
+        const updateVariables: AsyncUpdateResultsDataBatchMutationVariables = {
           projectId,
           connectionId,
           contextId,
@@ -126,21 +129,35 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
           editor.fillBatch(updateVariables);
         }
 
-        const response = await this.graphQLService.sdk.updateResultsDataBatch(updateVariables);
+        const task = this.asyncTaskInfoService.create(async () => {
+          const { taskInfo } = await this.graphQLService.sdk.asyncUpdateResultsDataBatch(updateVariables);
+          return taskInfo;
+        });
+
+        this.currentTask = executionContext.run(
+          async () => {
+            const info = await this.asyncTaskInfoService.run(task);
+            const { result } = await this.graphQLService.sdk.getSqlExecuteTaskResults({ taskId: info.id });
+
+            return result;
+          },
+          () => this.asyncTaskInfoService.cancel(task.id),
+          () => this.asyncTaskInfoService.remove(task.id),
+        );
+
+        const response = await this.currentTask;
 
         if (editor) {
-          const responseResult = this.transformResults(executionContextInfo, response.result.results, 0).find(
-            newResult => newResult.id === result.id,
-          );
+          const responseResult = this.transformResults(executionContextInfo, response.results, 0).find(newResult => newResult.id === result.id);
 
           if (responseResult) {
-            editor.applyUpdate(responseResult);
+            editor.applyUpdate(responseResult.id, responseResult.data?.rowsWithMetaData?.map(r => r.data) || []);
           }
         }
 
         this.requestInfo = {
           ...this.requestInfo,
-          requestDuration: response.result.duration,
+          requestDuration: response.duration,
           requestMessage: 'plugin_data_viewer_result_set_save_success',
           source: this.options.query,
         };
@@ -174,25 +191,7 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
       firstResultId = this.getPreviousResultId(prevResults, executionContextInfo);
     }
 
-    const task = this.asyncTaskInfoService.create(async () => {
-      const { taskInfo } = await this.graphQLService.sdk.asyncSqlExecuteQuery({
-        projectId: executionContextInfo.projectId,
-        connectionId: executionContextInfo.connectionId,
-        contextId: executionContextInfo.id,
-        query: options.query,
-        resultId: firstResultId,
-        filter: {
-          offset: this.offset,
-          limit,
-          constraints: options.constraints,
-          where: options.whereFilter || undefined,
-        },
-        dataFormat: this.dataFormat,
-        readLogs: options.readLogs,
-      });
-
-      return taskInfo;
-    });
+    const task = this.asyncTaskInfoService.create(() => this.executeQuery(executionContextInfo, options, firstResultId, limit));
 
     this.currentTask = executionContext.run(
       async () => {
@@ -222,6 +221,32 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
     }
   }
 
+  protected async executeQuery(
+    executionContextInfo: IConnectionExecutionContextInfo,
+    options: TOptions,
+    firstResultId: string | undefined,
+    limit: number,
+  ): Promise<AsyncTaskInfo> {
+    const { taskInfo } = await this.graphQLService.sdk.asyncSqlExecuteQuery({
+      projectId: executionContextInfo.projectId,
+      connectionId: executionContextInfo.connectionId,
+      contextId: executionContextInfo.id,
+      query: options.query,
+      resultId: firstResultId,
+      filter: {
+        offset: this.offset,
+        limit,
+        constraints: options.constraints,
+        where: options.whereFilter || undefined,
+      },
+      dataFormat: this.dataFormat,
+      readLogs: options.readLogs,
+      isInteractive: true,
+    });
+
+    return taskInfo;
+  }
+
   private innerGetResults(
     executionContextInfo: IConnectionExecutionContextInfo,
     response: SqlExecuteInfo,
@@ -246,7 +271,7 @@ export class QueryDataSource<TOptions extends IDataQueryOptions = IDataQueryOpti
   private transformResults(executionContextInfo: IConnectionExecutionContextInfo, results: SqlQueryResults[], limit: number): IDatabaseResultSet[] {
     return results.map<IDatabaseResultSet>((result, index) => ({
       id: result.resultSet?.id || null,
-      uniqueResultId: `${executionContextInfo.connectionId}_${executionContextInfo.id}_${index}`,
+      uniqueResultId: `${executionContextInfo.connectionId}_${executionContextInfo.id}_${result.dataFormat}_${index}`,
       projectId: executionContextInfo.projectId,
       connectionId: executionContextInfo.connectionId,
       contextId: executionContextInfo.id,

@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['administration_server_configuration_save_confirmation_title', 'Server settings update'],
   ['administration_server_configuration_save_confirmation_message', 'You are about to change critical settings. Are you sure?'],
@@ -33,6 +26,26 @@ export default [
   ['administration_configuration_tools_save_tooltip', 'Save configuration'],
   ['administration_configuration_tools_cancel_tooltip', 'Reset changes'],
 
+  ['administration_configuration_wizard_configuration_secure_cookies', 'Force HTTPS mode'],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_description',
+    'Enable force HTTPS to secure server-client communication. Recommended for production. Ensure your HTTPS proxy is properly configured for correct app functionality',
+  ],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_warning',
+    "The data won't be encrypted if forced HTTPS mode is disabled. This makes it vulnerable",
+  ],
+  ['administration_configuration_wizard_configuration_secure_cookies_docs', 'Server proxy configuration documentation'],
+  ['administration_configuration_wizard_configuration_supported_hosts', 'Allowed Server URLs'],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_description',
+    'You can specify multiple server URLs separated by a new line. An empty value means that all URLs are allowed. Access from the IP-addresses is always allowed.',
+  ],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_warning',
+    'You cannot remove your current domain ({arg:host}). Open the server configuration from another allowed domain or IP-address to remove this domain.',
+  ],
+
   ['administration_configuration_wizard_configuration_server_info', 'Server Information'],
   ['administration_configuration_wizard_configuration_server_name', 'Server Name'],
   ['administration_configuration_wizard_configuration_server_url', 'Server URL'],
@@ -59,11 +72,10 @@ export default [
   ['administration_configuration_wizard_configuration_security_admin_credentials', 'Save credentials'],
   [
     'administration_configuration_wizard_configuration_security_admin_credentials_description',
-    'Allow to save credentials for pre-configured database',
+    'Allows to save credentials for pre-configured databases',
   ],
   ['administration_configuration_wizard_configuration_security_public_credentials', 'Save users credentials'],
-  ['administration_configuration_wizard_configuration_security_public_credentials_description', 'Allow to save credentials for non-admin users'],
-
+  ['administration_configuration_wizard_configuration_security_public_credentials_description', 'Allows to save credentials for non-admin users'],
   ['administration_configuration_wizard_configuration_navigator', 'Navigator'],
   ['administration_configuration_wizard_configuration_navigator_hide_folders', 'Hide Folders'],
   ['administration_configuration_wizard_configuration_navigator_hide_schemas', 'Hide Schemas'],
@@ -85,4 +97,8 @@ export default [
 
   ['administration_disabled_drivers_title', 'Disabled drivers'],
   ['administration_disabled_drivers_search_placeholder', 'Search for the driver...'],
+  [
+    'administration_disabled_drivers_enable_unsafe_driver_message',
+    'Enabling this database driver may allow access to files on the server where this application is running. This could potentially expose sensitive system files or other protected data.\n\nOnly proceed if you fully understand the implications and trust the database configuration. Unauthorized or improper use of this driver may lead to security risks.\n\nDo you want to enable the "{arg:driverName}" driver?',
+  ],
 ];

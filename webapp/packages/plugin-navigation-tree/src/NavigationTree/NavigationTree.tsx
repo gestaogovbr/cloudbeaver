@@ -6,9 +6,9 @@
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 
-import { s, SContext, type StyleRegistry, Translate, useS, useUserData } from '@cloudbeaver/core-blocks';
+import { s, SContext, type StyleRegistry, Translate, useExecutor, useS, useUserData } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { NavNodeInfoResource, NavTreeResource, ProjectsNavNodeService, ROOT_NODE_PATH } from '@cloudbeaver/core-navigation-tree';
 import { ProjectsService } from '@cloudbeaver/core-projects';
@@ -24,8 +24,10 @@ import {
   createElementsTreeSettings,
   validateElementsTreeSettings,
 } from './ElementsTree/ElementsTreeTools/NavigationTreeSettings/createElementsTreeSettings.js';
+import { ObjectsDescriptionSettingsPlaceholderElement } from './ElementsTree/ElementsTreeTools/NavigationTreeSettings/ObjectsDescriptionSettingsForm.js';
+import { transformDescriptionNodeInfo } from './ElementsTree/transformDescriptionNodeInfo.js';
 import { transformFilteredNodeInfo } from './ElementsTree/transformFilteredNodeInfo.js';
-import type { IElementsTreeSettings } from './ElementsTree/useElementsTree.js';
+import type { IElementsTree, IElementsTreeSettings } from './ElementsTree/useElementsTree.js';
 import elementsTreeToolsStyles from './ElementsTreeTools.module.css';
 import { getNavigationTreeUserSettingsId } from './getNavigationTreeUserSettingsId.js';
 import style from './NavigationTree.module.css';
@@ -49,6 +51,7 @@ const registry: StyleRegistry = [
 ];
 
 export const NavigationTree = observer(function NavigationTree() {
+  const tree = useRef<IElementsTree>(null);
   const styles = useS(style);
   const projectsNavNodeService = useService(ProjectsNavNodeService);
   const projectsService = useService(ProjectsService);
@@ -77,23 +80,36 @@ export const NavigationTree = observer(function NavigationTree() {
     [navNodeInfoResource, projectsService, projectsNavNodeService],
   );
   const transformFilteredNode = useMemo(() => transformFilteredNodeInfo(navNodeInfoResource), [navNodeInfoResource]);
+  const transformDescriptionNode = useMemo(() => transformDescriptionNodeInfo(navNodeInfoResource), [navNodeInfoResource]);
   const projectFilter = useMemo(
     () => navigationTreeProjectFilter(projectsNavNodeService, projectsService, navNodeInfoResource, navTreeResource),
     [projectsNavNodeService, projectsService, navNodeInfoResource, navTreeResource],
   );
 
-  const settingsElements = useMemo(() => [ProjectsSettingsPlaceholderElement], []);
+  const settingsElements = useMemo(() => [ProjectsSettingsPlaceholderElement, ObjectsDescriptionSettingsPlaceholderElement], []);
+
+  useExecutor({
+    executor: navTreeService.showNodeExecutor,
+    handlers: [
+      function showNode(data) {
+        if (tree.current) {
+          tree.current.show(data.id, data.path);
+        }
+      },
+    ],
+  });
 
   return (
     <SContext registry={registry}>
       <CaptureView view={navTreeService} className={s(styles, { captureView: true })}>
         <ElementsTree
+          ref={tree}
           root={root}
           localState={navTreeService.treeState}
           filters={[duplicateFilter, connectionGroupFilter, projectFilter]}
           renderers={[projectsRendererRenderer, navigationTreeConnectionGroupRenderer, connectionRenderer]}
           navNodeFilterCompare={navigationTreeProjectSearchCompare}
-          nodeInfoTransformers={[transformFilteredNode]}
+          nodeInfoTransformers={[transformFilteredNode, transformDescriptionNode]}
           expandStateGetters={[projectsExpandStateGetter]}
           settingsElements={settingsElements}
           className={s(styles, { elementsTree: true })}

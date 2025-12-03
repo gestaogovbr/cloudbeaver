@@ -1,14 +1,13 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 import React, { useContext } from 'react';
-import { MenuItem as ReakitMenuItem } from 'reakit';
-import type { CompositeItemOptions } from 'reakit';
+import { MenuItem as ReakitMenuItem, type CompositeItemOptions } from 'reakit';
 
 import { s } from '../s.js';
 import { useCombinedHandler } from '../useCombinedHandler.js';
@@ -42,6 +41,8 @@ export const MenuItem: ReakitProxyComponent<'button', MenuItemOptions> = observe
         {...rest}
         className={s(styles, { menuItem: true, hidden }, className)}
         disabled={selected || rest.disabled}
+        style={{ pointerEvents: 'auto' }}
+        focusable
         onClick={handleClick}
       >
         {children}

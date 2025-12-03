@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,43 +8,39 @@
 import { observer } from 'mobx-react-lite';
 import { useContext, useRef } from 'react';
 
-import type { RenderCellProps } from '@cloudbeaver/plugin-data-grid';
-import { type IResultSetRowKey, isBooleanValuePresentationAvailable } from '@cloudbeaver/plugin-data-viewer';
+import { isBooleanValuePresentationAvailable } from '@cloudbeaver/plugin-data-viewer';
 
 import { CellContext } from '../CellRenderer/CellContext.js';
 import { TableDataContext } from '../TableDataContext.js';
 import { BlobFormatter } from './CellFormatters/BlobFormatter.js';
 import { BooleanFormatter } from './CellFormatters/BooleanFormatter.js';
 import { TextFormatter } from './CellFormatters/TextFormatter.js';
+import type { ICellFormatterProps } from './ICellFormatterProps.js';
+import { IndexFormatter } from './IndexFormatter.js';
 
-interface IProps extends RenderCellProps<IResultSetRowKey> {
-  isEditing: boolean;
-}
-
-export const CellFormatterFactory = observer<IProps>(function CellFormatterFactory(props) {
-  const formatterRef = useRef<React.FC<RenderCellProps<IResultSetRowKey>> | null>(null);
+export const CellFormatterFactory = observer<ICellFormatterProps>(function CellFormatterFactory(props) {
+  const formatterRef = useRef<React.FC<ICellFormatterProps> | null>(null);
   const tableDataContext = useContext(TableDataContext);
   const cellContext = useContext(CellContext);
 
-  if (!props.isEditing || formatterRef.current === null) {
+  if (formatterRef.current === null) {
     formatterRef.current = TextFormatter;
 
     if (cellContext.cell) {
-      const isBlob = tableDataContext.format.isBinary(cellContext.cell);
+      const holder = tableDataContext.getCellHolder(cellContext.cell);
+      const isBlob = tableDataContext.format.isBinary(holder);
 
       if (isBlob) {
         formatterRef.current = BlobFormatter;
       } else {
-        const value = tableDataContext.getCellValue(cellContext.cell);
-        if (value !== undefined) {
-          const resultColumn = tableDataContext.getColumnInfo(cellContext.cell.column);
-          const rawValue = tableDataContext.format.get(cellContext.cell);
+        const resultColumn = tableDataContext.getColumnInfo(cellContext.cell.column);
 
-          if (resultColumn && isBooleanValuePresentationAvailable(rawValue, resultColumn)) {
-            formatterRef.current = BooleanFormatter;
-          }
+        if (resultColumn && isBooleanValuePresentationAvailable(holder.value, resultColumn)) {
+          formatterRef.current = BooleanFormatter;
         }
       }
+    } else {
+      formatterRef.current = IndexFormatter;
     }
   }
 

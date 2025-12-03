@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,14 @@
 package io.cloudbeaver.service.sql;
 
 import io.cloudbeaver.DBWebException;
+import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.WebConnectionInfo;
 import io.cloudbeaver.model.session.WebSession;
+import io.cloudbeaver.model.session.WebSessionPreferenceStore;
 import io.cloudbeaver.model.session.WebSessionProvider;
-import io.cloudbeaver.server.CBPlatform;
+import io.cloudbeaver.server.WebAppUtils;
 import io.cloudbeaver.server.jobs.SqlOutputLogReaderJob;
+import io.cloudbeaver.service.sql.messages.WebSQLMessages;
 import org.eclipse.jface.text.Document;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -41,22 +44,33 @@ import org.jkiss.dbeaver.model.impl.AbstractExecutionSource;
 import org.jkiss.dbeaver.model.impl.DefaultServerOutputReader;
 import org.jkiss.dbeaver.model.navigator.DBNDatabaseItem;
 import org.jkiss.dbeaver.model.navigator.DBNNode;
+import org.jkiss.dbeaver.model.qm.QMUtils;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.sql.*;
 import org.jkiss.dbeaver.model.sql.parser.SQLParserContext;
 import org.jkiss.dbeaver.model.sql.parser.SQLRuleManager;
 import org.jkiss.dbeaver.model.sql.parser.SQLScriptParser;
 import org.jkiss.dbeaver.model.struct.*;
+import org.jkiss.dbeaver.model.websocket.event.WSEvent;
+import org.jkiss.dbeaver.model.websocket.event.WSTransactionalCountEvent;
+import org.jkiss.dbeaver.model.websocket.event.session.WSSessionTaskConfirmationRequestEvent;
+import org.jkiss.dbeaver.model.websocket.event.session.WSSessionTaskQueryConfirmationRequestEvent;
+import org.jkiss.dbeaver.registry.confirmation.ConfirmationConstants;
+import org.jkiss.dbeaver.registry.confirmation.ConfirmationDescriptor;
+import org.jkiss.dbeaver.registry.confirmation.ConfirmationRegistry;
 import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.MessageFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -164,7 +178,10 @@ public class WebSQLProcessor implements WebSessionProvider {
         @Nullable WebSQLDataFilter filter,
         @Nullable WebDataFormat dataFormat,
         @NotNull WebSession webSession,
-        boolean readLogs) throws DBWebException {
+        @NotNull WebAsyncTaskInfo asyncTask,
+        boolean readLogs,
+        boolean useEvents
+    ) throws DBWebException, DBCException {
         if (filter == null) {
             // Use default filter
             filter = new WebSQLDataFilter();
@@ -199,63 +216,83 @@ public class WebSQLProcessor implements WebSessionProvider {
 
             SQLScriptElement element = SQLScriptParser.extractActiveQuery(parserContext, 0, sql.length());
 
+            boolean isGenerated = false;
             if (element instanceof SQLControlCommand command) {
-                dataContainer.getScriptContext().executeControlCommand(command);
-                WebSQLQueryResults stats = new WebSQLQueryResults(webSession, dataFormat);
-                executeInfo.setResults(new WebSQLQueryResults[]{stats});
-            } else if (element instanceof SQLQuery sqlQuery) {
+                SQLControlResult controlResult = dataContainer.getScriptContext().executeControlCommand(monitor, command);
+                if (controlResult.getTransformed() != null) {
+                    isGenerated = true;
+                    element = controlResult.getTransformed();
+                } else {
+                    WebSQLQueryResults stats = new WebSQLQueryResults(webSession, dataFormat);
+                    executeInfo.setResults(new WebSQLQueryResults[]{stats});
+                }
+            }
+            if (element instanceof SQLQuery mainQuery) {
+                if (useEvents) {
+                    boolean isConfirmed = confirmQueryIfNeeded(mainQuery.getScriptElements(), asyncTask, isGenerated);
+                    if (!isConfirmed) {
+                        throw new DBWebException("Query execution was cancelled by user");
+                    }
+                }
+
                 DBExecUtils.tryExecuteRecover(monitor, connection.getDataSource(), param -> {
                     try (DBCSession session = context.openSession(monitor, resolveQueryPurpose(dataFilter), "Execute SQL")) {
-                        AbstractExecutionSource source = new AbstractExecutionSource(
-                            dataContainer,
-                            session.getExecutionContext(),
-                            WebSQLProcessor.this,
-                            sqlQuery);
+                        List<SQLScriptElement> sqlQueries = mainQuery.getScriptElements();
+                        for (SQLScriptElement sqlElement : sqlQueries) {
+                            if (!(sqlElement instanceof SQLQuery sqlQuery)) {
+                                log.error("Non-query script elements are not allowed: " + sqlElement);
+                                continue;
+                            }
 
-                        try (DBCStatement dbStat = DBUtils.makeStatement(
-                            source,
-                            session,
-                            DBCStatementType.SCRIPT,
-                            sqlQuery,
-                            webDataFilter.getOffset(),
-                            webDataFilter.getLimit()))
-                        {
-                            SqlOutputLogReaderJob sqlOutputLogReaderJob = null;
-                            if (readLogs) {
-                                DBPDataSource dataSource = context.getDataSource();
-                                DBCServerOutputReader dbcServerOutputReader = DBUtils.getAdapter(DBCServerOutputReader.class, dataSource);
-                                if (dbcServerOutputReader == null) {
-                                    dbcServerOutputReader = new DefaultServerOutputReader();
+                            AbstractExecutionSource source = new AbstractExecutionSource(
+                                dataContainer,
+                                session.getExecutionContext(),
+                                WebSQLProcessor.this,
+                                sqlQuery);
+
+                            try (DBCStatement dbStat = DBUtils.makeStatement(
+                                source,
+                                session,
+                                DBCStatementType.SCRIPT,
+                                sqlQuery,
+                                webDataFilter.getOffset(),
+                                webDataFilter.getLimit()))
+                            {
+                                SqlOutputLogReaderJob sqlOutputLogReaderJob = null;
+                                if (readLogs) {
+                                    DBPDataSource dataSource = context.getDataSource();
+                                    DBCServerOutputReader dbcServerOutputReader = DBUtils.getAdapter(DBCServerOutputReader.class, dataSource);
+                                    if (dbcServerOutputReader == null) {
+                                        dbcServerOutputReader = new DefaultServerOutputReader();
+                                    }
+                                    sqlOutputLogReaderJob = new SqlOutputLogReaderJob(
+                                        webSession, context, dbStat, dbcServerOutputReader, contextInfo.getId());
+                                    sqlOutputLogReaderJob.schedule();
                                 }
-                                sqlOutputLogReaderJob = new SqlOutputLogReaderJob(
-                                    webSession, context, dbStat, dbcServerOutputReader, contextInfo.getId());
-                                sqlOutputLogReaderJob.schedule();
-                            }
-                            // Set query timeout
-                            int queryTimeout = (int) session.getDataSource().getContainer().getPreferenceStore()
-                                .getDouble(WebSQLConstants.QUOTA_PROP_SQL_QUERY_TIMEOUT);
-                            if (queryTimeout <= 0) {
-                                queryTimeout = CommonUtils.toInt(
-                                    getWebSession().getApplication().getAppConfiguration()
-                                        .getResourceQuota(WebSQLConstants.QUOTA_PROP_SQL_QUERY_TIMEOUT));
-                            }
-                            if (queryTimeout > 0) {
-                                try {
-                                    dbStat.setStatementTimeout(queryTimeout);
-                                } catch (Throwable e) {
-                                    log.debug("Can't set statement timeout:" + e.getMessage());
+                                // Set query timeout
+                                int queryTimeout = session.getDataSource().getContainer().getPreferenceStore()
+                                    .getInt(WebSQLConstants.QUOTA_PROP_SQL_QUERY_TIMEOUT);
+                                if (queryTimeout <= 0) {
+                                    queryTimeout = CommonUtils.toInt(
+                                        getWebSession().getApplication().getAppConfiguration()
+                                            .getResourceQuota(WebSQLConstants.QUOTA_PROP_SQL_QUERY_TIMEOUT));
                                 }
-                            }
+                                if (queryTimeout > 0) {
+                                    try {
+                                        dbStat.setStatementTimeout(queryTimeout);
+                                    } catch (Throwable e) {
+                                        log.debug("Can't set statement timeout:" + e.getMessage());
+                                    }
+                                }
 
-                            boolean hasResultSet = dbStat.executeStatement();
+                                boolean hasResultSet = dbStat.executeStatement();
 
-                            // Wait SqlLogStateJob, if its starts
-                            if (sqlOutputLogReaderJob != null) {
-                                sqlOutputLogReaderJob.join();
+                                // Wait SqlLogStateJob, if its starts
+                                if (sqlOutputLogReaderJob != null) {
+                                    sqlOutputLogReaderJob.join();
+                                }
+                                fillQueryResults(contextInfo, dataContainer, dbStat, hasResultSet, executeInfo, webDataFilter, dataFilter, dataFormat);
                             }
-                            fillQueryResults(contextInfo, dataContainer, dbStat, hasResultSet, executeInfo, webDataFilter, dataFilter, dataFormat);
-                        } catch (DBException e) {
-                            throw new InvocationTargetException(e);
                         }
                     }
                 });
@@ -265,6 +302,11 @@ public class WebSQLProcessor implements WebSessionProvider {
         } catch (DBException e) {
             throw new DBWebException("Error executing query", e);
         }
+        DBCTransactionManager txnManager = DBUtils.getTransactionManager(context);
+        if (txnManager != null && !txnManager.isAutoCommit()) {
+            sendTransactionalEvent(contextInfo);
+        }
+
         executeInfo.setDuration(System.currentTimeMillis() - startTime);
         if (executeInfo.getResults().length == 0) {
             executeInfo.setStatusMessage("No Data");
@@ -282,15 +324,18 @@ public class WebSQLProcessor implements WebSessionProvider {
         @NotNull DBSDataContainer dataContainer,
         @Nullable String resultId,
         @NotNull WebSQLDataFilter filter,
-        @Nullable WebDataFormat dataFormat) throws DBException {
+        @Nullable WebDataFormat dataFormat
+    ) throws DBException {
 
         WebSQLExecuteInfo executeInfo = new WebSQLExecuteInfo();
 
-        DBCExecutionContext executionContext = getExecutionContext(dataContainer);
+        DBCExecutionContext executionContext = DBUtils.getOrOpenDefaultContext(dataContainer, false);
         DBDDataFilter dataFilter = filter.makeDataFilter((resultId == null ? null : contextInfo.getResults(resultId)));
         DBExecUtils.tryExecuteRecover(monitor, connection.getDataSource(), param -> {
             try (DBCSession session = executionContext.openSession(monitor, resolveQueryPurpose(dataFilter), "Read data from container")) {
-                try (WebSQLQueryDataReceiver dataReceiver = new WebSQLQueryDataReceiver(contextInfo, dataContainer, dataFormat)) {
+                try (
+                    WebSQLQueryDataReceiver dataReceiver = new WebSQLQueryDataReceiver(contextInfo, dataContainer, dataFormat, dataFilter)
+                ) {
                     DBCStatistics statistics = dataContainer.readData(
                         new WebExecutionSource(dataContainer, executionContext, this),
                         session,
@@ -307,14 +352,12 @@ public class WebSQLProcessor implements WebSessionProvider {
                     results.setResultSet(resultSet);
 
                     executeInfo.setResults(new WebSQLQueryResults[]{results});
-                    setResultFilterText(dataContainer, session.getDataSource(), executeInfo, dataFilter);
+                    setResultFilterText(session.getDataSource(), executeInfo, dataFilter);
                     executeInfo.setFullQuery(statistics.getQueryText());
-                    if (resultSet != null && resultSet.getRows() != null) {
+                    if (resultSet != null && resultSet.getRowsWithMetaData() != null && resultSet.getResultsInfo() != null) {
                         resultSet.getResultsInfo().setQueryText(statistics.getQueryText());
-                        executeInfo.setStatusMessage(resultSet.getRows().length + " row(s) fetched");
+                        executeInfo.setStatusMessage(resultSet.getRowsWithMetaData().size() + " row(s) fetched");
                     }
-                } catch (DBException e) {
-                    throw new InvocationTargetException(e);
                 }
             }
         });
@@ -349,17 +392,17 @@ public class WebSQLProcessor implements WebSessionProvider {
 
         WebSQLExecuteInfo result = new WebSQLExecuteInfo();
         List<WebSQLQueryResults> queryResults = new ArrayList<>();
+        boolean isAutoCommitEnabled = true;
+
         for (var rowIdentifier : rowIdentifierList) {
             Map<DBSDataManipulator.ExecuteBatch, Object[]> resultBatches = new LinkedHashMap<>();
             DBSDataManipulator dataManipulator = generateUpdateResultsDataBatch(
-                monitor, resultsInfo, rowIdentifier, updatedRows, deletedRows, addedRows, dataFormat, resultBatches, keyReceiver);
-
+                monitor, resultsInfo, rowIdentifier, updatedRows, deletedRows, addedRows, resultBatches, keyReceiver);
 
             DBCExecutionContext executionContext = getExecutionContext(dataManipulator);
             try (DBCSession session = executionContext.openSession(monitor, DBCExecutionPurpose.USER, "Update data in container")) {
                 DBCTransactionManager txnManager = DBUtils.getTransactionManager(executionContext);
                 boolean revertToAutoCommit = false;
-                boolean isAutoCommitEnabled = true;
                 DBCSavepoint savepoint = null;
                 if (txnManager != null) {
                     isAutoCommitEnabled = txnManager.isAutoCommit();
@@ -416,6 +459,10 @@ public class WebSQLProcessor implements WebSessionProvider {
         }
         getUpdatedRowsInfo(resultsInfo, newResultSetRows, dataFormat, monitor);
 
+        if (!isAutoCommitEnabled) {
+            sendTransactionalEvent(contextInfo);
+        }
+
         WebSQLQueryResultSet updatedResultSet = new WebSQLQueryResultSet();
         updatedResultSet.setResultsInfo(resultsInfo);
         updatedResultSet.setColumns(resultsInfo.getAttributes());
@@ -432,12 +479,26 @@ public class WebSQLProcessor implements WebSessionProvider {
         return result;
     }
 
+    private void sendTransactionalEvent(WebSQLContextInfo contextInfo) {
+        int count = QMUtils.getTransactionState(getExecutionContext()).getUpdateCount();
+        webSession.addSessionEvent(
+            new WSTransactionalCountEvent(
+                contextInfo.getWebSession().getSessionId(),
+                contextInfo.getWebSession().getUserId(),
+                contextInfo.getProjectId(),
+                contextInfo.getId(),
+                contextInfo.getConnectionId(),
+                count
+            )
+        );
+    }
+
     private void getUpdatedRowsInfo(
         @NotNull WebSQLResultsInfo resultsInfo,
         @NotNull Set<WebSQLQueryResultSetRow> newResultSetRows,
         @Nullable WebDataFormat dataFormat,
         @NotNull DBRProgressMonitor monitor)
-        throws DBCException {
+        throws DBException {
         try (DBCSession session = getExecutionContext().openSession(
             monitor,
             DBCExecutionPurpose.UTIL,
@@ -513,9 +574,8 @@ public class WebSQLProcessor implements WebSessionProvider {
         @NotNull String resultsId,
         @Nullable List<WebSQLResultsRow> updatedRows,
         @Nullable List<WebSQLResultsRow> deletedRows,
-        @Nullable List<WebSQLResultsRow> addedRows,
-        @Nullable WebDataFormat dataFormat) throws DBException
-    {
+        @Nullable List<WebSQLResultsRow> addedRows
+    ) throws DBException {
         Map<DBSDataManipulator.ExecuteBatch, Object[]> resultBatches = new LinkedHashMap<>();
 
 
@@ -531,7 +591,7 @@ public class WebSQLProcessor implements WebSessionProvider {
         StringBuilder sqlBuilder = new StringBuilder();
         for (var rowIdentifier : rowIdentifierList) {
             DBSDataManipulator dataManipulator = generateUpdateResultsDataBatch(
-                monitor, resultsInfo, rowIdentifier, updatedRows, deletedRows, addedRows, dataFormat, resultBatches, null);
+                monitor, resultsInfo, rowIdentifier, updatedRows, deletedRows, addedRows, resultBatches, null);
 
             List<DBEPersistAction> actions = new ArrayList<>();
 
@@ -557,7 +617,6 @@ public class WebSQLProcessor implements WebSessionProvider {
         @Nullable List<WebSQLResultsRow> updatedRows,
         @Nullable List<WebSQLResultsRow> deletedRows,
         @Nullable List<WebSQLResultsRow> addedRows,
-        @Nullable WebDataFormat dataFormat,
         @NotNull Map<DBSDataManipulator.ExecuteBatch, Object[]> resultBatches,
         @Nullable DBDDataReceiver keyReceiver)
         throws DBException
@@ -817,7 +876,6 @@ public class WebSQLProcessor implements WebSessionProvider {
     @NotNull
     public WebSQLExecutionPlan explainExecutionPlan(
         @NotNull DBRProgressMonitor monitor,
-        @NotNull WebSQLContextInfo contextInfo,
         @NotNull String sql,
         @NotNull Map<String, Object> configuration) throws DBWebException {
 
@@ -842,8 +900,6 @@ public class WebSQLProcessor implements WebSessionProvider {
                     DBCQueryPlannerConfiguration planConfig = new DBCQueryPlannerConfiguration();
                     planConfig.getParameters().putAll(configuration);
                     dbcPlan[0] = planner.planQueryExecution(session, sql, planConfig);
-                } catch (DBException e) {
-                    throw new InvocationTargetException(e);
                 }
             });
         } catch (DBException e) {
@@ -859,13 +915,18 @@ public class WebSQLProcessor implements WebSessionProvider {
         @NotNull WebSQLContextInfo contextInfo,
         @NotNull String resultsId,
         @NotNull Integer lobColumnIndex,
-        @Nullable WebSQLResultsRow row
+        @NotNull WebSQLResultsRow row
     ) throws DBException {
         WebSQLResultsInfo resultsInfo = contextInfo.getResults(resultsId);
 
         DBDRowIdentifier rowIdentifier = resultsInfo.getDefaultRowIdentifier();
-        checkRowIdentifier(resultsInfo, rowIdentifier);
-        String tableName = rowIdentifier.getEntity().getName();
+        String tableName;
+        if (rowIdentifier == null && resultsInfo.isSingleRow()) {
+            tableName = resultsInfo.getDataContainer().getName();
+        } else {
+            checkRowIdentifier(resultsInfo, rowIdentifier);
+            tableName = rowIdentifier.getEntity().getName();
+        }
         WebSQLDataLOBReceiver dataReceiver = new WebSQLDataLOBReceiver(tableName, resultsInfo.getDataContainer(), lobColumnIndex);
         readCellDataValue(monitor, resultsInfo, row, dataReceiver);
         try {
@@ -878,56 +939,78 @@ public class WebSQLProcessor implements WebSessionProvider {
     private void readCellDataValue(
         @NotNull DBRProgressMonitor monitor,
         @NotNull WebSQLResultsInfo resultsInfo,
-        @Nullable WebSQLResultsRow row,
-        @NotNull WebSQLCellValueReceiver dataReceiver) throws DBException {
+        @NotNull WebSQLResultsRow row,
+        @NotNull WebSQLCellValueReceiver dataReceiver
+    ) throws DBException {
         DBSDataContainer dataContainer = resultsInfo.getDataContainer();
         DBCExecutionContext executionContext = getExecutionContext(dataContainer);
         try (DBCSession session = executionContext.openSession(monitor, DBCExecutionPurpose.USER, "Generate data update batches")) {
-            WebExecutionSource executionSource = new WebExecutionSource(dataContainer, executionContext, this);
             DBDDataFilter dataFilter = new DBDDataFilter();
-            DBDAttributeBinding[] keyAttributes = resultsInfo.getDefaultRowIdentifier().getAttributes().toArray(new DBDAttributeBinding[0]);
-            Object[] rowValues = new Object[keyAttributes.length];
-            List<DBDAttributeConstraint> constraints = new ArrayList<>();
-            for (int i = 0; i < keyAttributes.length; i++) {
-                DBDAttributeBinding keyAttribute = keyAttributes[i];
-                boolean isDocumentValue = keyAttributes.length == 1 && keyAttribute.getDataKind() == DBPDataKind.DOCUMENT && dataContainer instanceof DBSDocumentLocator;
-                if (isDocumentValue) {
-                    rowValues[i] =
-                        makeDocumentInputValue(session, (DBSDocumentLocator) dataContainer, resultsInfo, row, null);
-                } else {
-                    Object inputCellValue = row.getData()[keyAttribute.getOrdinalPosition()];
-
-                    rowValues[i] = keyAttribute.getValueHandler().getValueFromObject(
-                        session,
-                        keyAttribute,
-                        convertInputCellValue(session, keyAttribute,
-                            inputCellValue, false),
-                        false,
-                        true);
-                }
-                final DBDAttributeConstraint constraint = new DBDAttributeConstraint(keyAttribute);
-                constraint.setOperator(DBCLogicalOperator.EQUALS);
-                constraint.setValue(rowValues[i]);
-                constraints.add(constraint);
-            }
-            dataFilter.addConstraints(constraints);
-            DBCStatistics statistics = dataContainer.readData(
+            addKeyAttributes(resultsInfo, row, dataContainer, session, dataFilter);
+            WebExecutionSource executionSource = new WebExecutionSource(dataContainer, executionContext, this);
+            dataContainer.readData(
                 executionSource, session, dataReceiver, dataFilter,
                 0, 1, DBSDataContainer.FLAG_NONE, 1);
         }
     }
 
+    private void addKeyAttributes(
+        @NotNull WebSQLResultsInfo resultsInfo,
+        @NotNull WebSQLResultsRow row,
+        @NotNull DBSDataContainer dataContainer,
+        @NotNull DBCSession session,
+        @NotNull DBDDataFilter dataFilter
+    ) throws DBException {
+        DBDRowIdentifier rowIdentifier = resultsInfo.getDefaultRowIdentifier();
+        if (rowIdentifier == null || rowIdentifier.isIncomplete()) {
+            return;
+        }
+        DBDAttributeBinding[] keyAttributes = rowIdentifier.getAttributes().toArray(new DBDAttributeBinding[0]);
+        Object[] rowValues = new Object[keyAttributes.length];
+        List<DBDAttributeConstraint> constraints = new ArrayList<>();
+        for (int i = 0; i < keyAttributes.length; i++) {
+            DBDAttributeBinding keyAttribute = keyAttributes[i];
+            boolean isDocumentValue = keyAttributes.length == 1
+                                      && keyAttribute.getDataKind() == DBPDataKind.DOCUMENT
+                                      && dataContainer instanceof DBSDocumentLocator;
+            if (isDocumentValue) {
+                rowValues[i] =
+                    makeDocumentInputValue(session, (DBSDocumentLocator) dataContainer, resultsInfo, row, null);
+            } else {
+                Object inputCellValue = row.getData()[keyAttribute.getOrdinalPosition()];
+
+                rowValues[i] = keyAttribute.getValueHandler().getValueFromObject(
+                    session,
+                    keyAttribute,
+                    convertInputCellValue(session, keyAttribute,
+                        inputCellValue, false),
+                    false,
+                    true);
+            }
+            final DBDAttributeConstraint constraint = new DBDAttributeConstraint(keyAttribute);
+            constraint.setOperator(DBCLogicalOperator.EQUALS);
+            constraint.setValue(rowValues[i]);
+            constraints.add(constraint);
+        }
+        dataFilter.addConstraints(constraints);
+    }
+
+    /**
+     * Reads cell value as string from provided row and column index.
+     */
     @NotNull
     public String readStringValue(
         @NotNull DBRProgressMonitor monitor,
         @NotNull WebSQLContextInfo contextInfo,
         @NotNull String resultsId,
         @NotNull Integer columnIndex,
-        @Nullable WebSQLResultsRow row
+        @NotNull WebSQLResultsRow row
     ) throws DBException {
         WebSQLResultsInfo resultsInfo = contextInfo.getResults(resultsId);
-        DBDRowIdentifier rowIdentifier = resultsInfo.getDefaultRowIdentifier();
-        checkRowIdentifier(resultsInfo, rowIdentifier);
+        if (!resultsInfo.isSingleRow()) {
+            DBDRowIdentifier rowIdentifier = resultsInfo.getDefaultRowIdentifier();
+            checkRowIdentifier(resultsInfo, rowIdentifier);
+        }
         WebSQLCellValueReceiver dataReceiver = new WebSQLCellValueReceiver(resultsInfo.getDataContainer(), columnIndex);
         readCellDataValue(monitor, resultsInfo, row, dataReceiver);
         return new String(dataReceiver.getBinaryValue(monitor), StandardCharsets.UTF_8);
@@ -978,7 +1061,7 @@ public class WebSQLProcessor implements WebSessionProvider {
         List<WebSQLQueryResults> resultList = new ArrayList<>();
         int maxResultsCount = resolveMaxResultsCount(dataContainer.getDataSource());
         WebSQLQueryResults stats = new WebSQLQueryResults(webSession, dataFormat);
-        var rowsUpdated = 0;
+        long rowsUpdated = 0;
         for (int i = 0; i < maxResultsCount; i++) {
             if (hasResultSet) {
                 WebSQLQueryResults results = new WebSQLQueryResults(webSession, dataFormat);
@@ -986,10 +1069,16 @@ public class WebSQLProcessor implements WebSessionProvider {
                     if (resultSet == null) {
                         break;
                     }
-                    try (WebSQLQueryDataReceiver dataReceiver = new WebSQLQueryDataReceiver(contextInfo, dataContainer, dataFormat)) {
+                    try (
+                        WebSQLQueryDataReceiver dataReceiver = new WebSQLQueryDataReceiver(
+                            contextInfo,
+                            dataContainer,
+                            dataFormat,
+                            dataFilter
+                        )
+                    ) {
                         readResultSet(dbStat.getSession(), resultSet, webDataFilter, dataReceiver);
                         results.setResultSet(dataReceiver.getResultSet());
-                        dataReceiver.getResultSet().getResultsInfo().setQueryText(resultSet.getSourceStatement().getQueryString());
                     }
                 }
                 resultList.add(results);
@@ -1009,11 +1098,15 @@ public class WebSQLProcessor implements WebSessionProvider {
         }
         executeInfo.setResults(resultList.toArray(new WebSQLQueryResults[0]));
 
-        setResultFilterText(dataContainer, dbStat.getSession().getDataSource(), executeInfo, dataFilter);
+        setResultFilterText(dbStat.getSession().getDataSource(), executeInfo, dataFilter);
         executeInfo.setFullQuery(dbStat.getQueryString());
     }
 
-    private void setResultFilterText(@NotNull DBSDataContainer dataContainer, @NotNull DBPDataSource dataSource, @NotNull WebSQLExecuteInfo executeInfo, @NotNull DBDDataFilter filter) throws DBException {
+    private void setResultFilterText(
+        @NotNull DBPDataSource dataSource,
+        @NotNull WebSQLExecuteInfo executeInfo,
+        @NotNull DBDDataFilter filter
+    ) throws DBException {
         if (!filter.getConstraints().isEmpty() || !CommonUtils.isEmpty(filter.getWhere())) {
             StringBuilder where = new StringBuilder();
             SQLUtils.appendConditionString(
@@ -1026,8 +1119,13 @@ public class WebSQLProcessor implements WebSessionProvider {
         }
     }
 
-    private void readResultSet(@NotNull DBCSession session, @NotNull DBCResultSet dbResult, @NotNull WebSQLDataFilter filter, @NotNull WebSQLQueryDataReceiver dataReceiver) throws DBCException {
-        dataReceiver.fetchStart(session, dbResult, filter.getOffset(), filter.getLimit());
+    private void readResultSet(
+        @NotNull DBCSession session,
+        @NotNull DBCResultSet dbResult,
+        @NotNull WebSQLDataFilter filter,
+        @NotNull WebSQLQueryDataReceiver dataReceiver
+    ) throws DBException {
+        DBDDataReceiver.startFetchWorkflow(dataReceiver, session, dbResult, filter.getOffset(), filter.getLimit());
         int rowCount = 0;
         while (dbResult.nextRow()) {
             if (rowCount > filter.getLimit()) {
@@ -1037,7 +1135,6 @@ public class WebSQLProcessor implements WebSessionProvider {
             dataReceiver.fetchRow(session, dbResult);
             rowCount++;
         }
-        dataReceiver.fetchEnd(session, dbResult);
     }
 
     /**
@@ -1075,7 +1172,6 @@ public class WebSQLProcessor implements WebSessionProvider {
                 if (keyValue == null) {
                     continue;
                 }
-                boolean updated = false;
                 if (!CommonUtils.isEmpty(keyAttribute.getName())) {
                     DBDAttributeBinding binding = DBUtils.findObject(resultsAttributes, keyAttribute.getName());
                     if (binding != null) {
@@ -1146,10 +1242,9 @@ public class WebSQLProcessor implements WebSessionProvider {
 
     private Object setCellRowValue(Object cellRow, WebSession webSession, DBCSession dbcSession, DBDAttributeBinding allAttributes, boolean withoutExecution)
         throws DBException {
-        if (cellRow instanceof Map<?, ?>) {
-            Map<String, Object> variables = (Map<String, Object>) cellRow;
+        if (cellRow instanceof Map<?, ?> variables) {
             if (variables.get(FILE_ID) != null) {
-                Path path = CBPlatform.getInstance()
+                Path path = WebAppUtils.getWebPlatform()
                     .getTempFolder(webSession.getProgressMonitor(), TEMP_FILE_FOLDER)
                     .resolve(webSession.getSessionId())
                     .resolve(variables.get(FILE_ID).toString());
@@ -1163,5 +1258,116 @@ public class WebSQLProcessor implements WebSessionProvider {
             }
         }
         return convertInputCellValue(dbcSession, allAttributes, cellRow, withoutExecution);
+    }
+
+    private boolean confirmQueryIfNeeded(
+        @NotNull List<SQLScriptElement> scriptElements,
+        @NotNull WebAsyncTaskInfo asyncTask,
+        boolean isGenerated
+    ) throws DBWebException {
+        Boolean skipConfirmations = webSession.getAttribute(WebSQLConstants.SKIP_TASK_CONFIRMATIONS_ATTR);
+        if (skipConfirmations != null && skipConfirmations) {
+            return true;
+        }
+
+        boolean hasGeneratedUpdates = false;
+        boolean hasDangerousUpdates = false;
+        boolean hasDropStatement = false;
+        String title = null;
+        String message = null;
+        String queryPreview = null;
+        if (isGenerated) {
+            Set<SQLQueryCategory> categories = SQLQueryCategory.categorizeScript(scriptElements);
+            hasGeneratedUpdates = categories.contains(SQLQueryCategory.DDL) ||
+                categories.contains(SQLQueryCategory.DML) ||
+                categories.contains(SQLQueryCategory.UNKNOWN);
+            title = WebSQLMessages.model_web_ai_query_confirmation_title;
+            message = WebSQLMessages.model_web_ai_query_confirmation_message;
+            queryPreview = scriptElements.stream()
+                .map(SQLScriptElement::getText)
+                .collect(Collectors.joining("\n\n"));
+        } else {
+            WebSessionPreferenceStore store = webSession.getUserPreferenceStore();
+            boolean confirmDangerousQueries = store.getUserPreferenceBoolean(ConfirmationConstants.CONFIRM_DANGER_SQL_KEY, true);
+            boolean confirmDropQueries = store.getUserPreferenceBoolean(ConfirmationConstants.CONFIRM_DROP_SQL_KEY, true);
+            for (SQLScriptElement scriptElement : scriptElements) {
+                if (scriptElement instanceof SQLQuery sqlQuery) {
+                    if (confirmDangerousQueries && sqlQuery.isDeleteUpdateDangerous()) {
+                        hasDangerousUpdates = true;
+                        ConfirmationDescriptor descriptor = ConfirmationRegistry.getInstance()
+                            .getConfirmation(ConfirmationConstants.CONFIRM_DANGER_SQL_ID);
+                        title = descriptor.getLocalizedTitle(webSession.getLocale());
+                        var entityMetadata = sqlQuery.getEntityMetadata(false);
+                        message = MessageFormat.format(
+                            descriptor.getLocalizedMessage(webSession.getLocale()),
+                            sqlQuery.getType().name(),
+                            entityMetadata != null ? entityMetadata.getEntityName() : "multiple tables"
+                        );
+                        break;
+                    }
+                    if (confirmDropQueries && sqlQuery.isDropDangerous()) {
+                        hasDropStatement = true;
+                        ConfirmationDescriptor descriptor = ConfirmationRegistry.getInstance()
+                            .getConfirmation(ConfirmationConstants.CONFIRM_DROP_SQL_ID);
+                        title = descriptor.getLocalizedTitle(webSession.getLocale());
+                        message = MessageFormat.format(
+                            descriptor.getLocalizedMessage(webSession.getLocale()),
+                            sqlQuery.getText()
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!hasGeneratedUpdates && !hasDangerousUpdates && !hasDropStatement) {
+            return true;
+        } else {
+            return requestConfirmation(asyncTask, queryPreview, title, message);
+        }
+    }
+
+    private boolean requestConfirmation(
+        @NotNull WebAsyncTaskInfo asyncTask,
+        @Nullable String query,
+        @NotNull String title,
+        @NotNull String message
+    ) throws DBWebException {
+        String attributeName = WebSQLConstants.TASK_CONFIRMATION_ATTR_PREFIX + asyncTask.getId();
+        CompletableFuture<Boolean> confirmationFuture = new CompletableFuture<>();
+        webSession.setAttribute(attributeName, confirmationFuture);
+
+        webSession.addSessionEvent(createConfirmationEvent(asyncTask, query, title, message));
+
+        try {
+            Boolean isConfirmed = confirmationFuture.get(WebSQLConstants.TASK_CONFIRMATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return isConfirmed != null && isConfirmed;
+        } catch (TimeoutException e) {
+            throw new DBWebException("Query confirmation timeout");
+        } catch (Exception e) {
+            throw new DBWebException("Error when processing confirmation response", e);
+        } finally {
+            webSession.removeAttribute(attributeName);
+        }
+    }
+
+    @NotNull
+    private WSEvent createConfirmationEvent(
+        @NotNull WebAsyncTaskInfo asyncTask,
+        @Nullable String query,
+        @NotNull String title,
+        @NotNull String message
+    ) {
+        WSEvent confirmationEvent;
+        if (query != null) {
+            confirmationEvent = new WSSessionTaskQueryConfirmationRequestEvent(
+                asyncTask.getId(), title, message, query
+            );
+        } else {
+            confirmationEvent = new WSSessionTaskConfirmationRequestEvent(
+                asyncTask.getId(), title, message
+            );
+        }
+        return confirmationEvent;
     }
 }

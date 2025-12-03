@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['authentication_login_dialog_title', 'Authentication'],
   ['authentication_login', 'Login'],
@@ -31,8 +24,8 @@ export default [
   ['authentication_user_credentials', 'Credentials'],
   ['authentication_user_meta_parameters', 'Parameters'],
   ['authentication_team_meta_parameters', 'Parameters'],
-  ['authentication_user_password', 'User password'],
-  ['authentication_user_password_repeat', 'Repeat password'],
+  ['authentication_user_password', 'User Password'],
+  ['authentication_user_password_repeat', 'Repeat Password'],
   ['authentication_user_team', 'User team'],
   ['authentication_user_status', 'User status'],
   ['authentication_user_enabled', 'Enabled'],

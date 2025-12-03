@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ export interface IStructContainers {
   schemaList: ObjectContainer[];
   supportsCatalogChange: boolean;
   supportsSchemaChange: boolean;
+  defaultCatalog: string | undefined;
+  defaultSchema: string | undefined;
   activeCatalog: string | undefined;
 }
 
@@ -37,7 +39,7 @@ interface ObjectContainerParams {
   catalogId?: string;
 }
 
-@injectable()
+@injectable(() => [GraphQLService, NavTreeResource, ConnectionInfoResource, AppAuthService])
 export class ContainerResource extends CachedMapResource<ObjectContainerParams, IStructContainers> {
   constructor(
     private readonly graphQLService: GraphQLService,
@@ -131,6 +133,8 @@ export class ContainerResource extends CachedMapResource<ObjectContainerParams, 
           schemaList: navGetStructContainers.schemaList,
           supportsCatalogChange: navGetStructContainers.supportsCatalogChange,
           supportsSchemaChange: navGetStructContainers.supportsSchemaChange,
+          defaultCatalog: navGetStructContainers.defaultCatalog,
+          defaultSchema: navGetStructContainers.defaultSchema,
           activeCatalog: catalogId || undefined,
         },
       );

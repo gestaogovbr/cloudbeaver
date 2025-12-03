@@ -47,6 +47,10 @@ public class WebSessionWorkspace implements DBPWorkspace {
         this.workspaceAuthContext = new SessionContextImpl(null);
     }
 
+    public BaseWebSession getWebSession() {
+        return session;
+    }
+
     @NotNull
     @Override
     public DBPPlatform getPlatform() {
@@ -133,6 +137,7 @@ public class WebSessionWorkspace implements DBPWorkspace {
         clearProjects();
     }
 
+    @Nullable
     @Override
     public DBPImage getResourceIcon(DBPAdaptable resourceAdapter) {
         return null;

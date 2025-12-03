@@ -13,7 +13,7 @@ import { DataExportProcessService } from './DataExportProcessService.js';
 import { ExportNotification } from './ExportNotification/ExportNotification.js';
 import type { IExportContext } from './IExportContext.js';
 
-@injectable()
+@injectable(() => [NotificationService, DataExportProcessService])
 export class DataExportService {
   constructor(
     private readonly notificationService: NotificationService,
@@ -22,10 +22,6 @@ export class DataExportService {
 
   async cancel(exportId: string): Promise<void> {
     await this.dataExportProcessService.cancel(exportId);
-  }
-
-  async delete(exportId: string): Promise<void> {
-    await this.dataExportProcessService.delete(exportId);
   }
 
   download(exportId: string): void {

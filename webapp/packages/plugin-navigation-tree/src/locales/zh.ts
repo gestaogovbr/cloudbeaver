@@ -1,16 +1,9 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['plugin_navigation_tree_explorer_tab_title', '浏览器'],
   ['app_navigationTree_search', '搜索...'],
   ['app_navigationTree_limited', '元素数量限制为 {arg:limit} '],
-  ['app_navigationTree_action_link_with_editor', '连接至编辑器'],
   ['app_navigationTree_action_collapse_all', '收起全部'],
+  ['app_navigationTree_settings_filter_objects_description', 'Show objects description'],
   ['app_navigationTree_settings_filter_title', '过滤器'],
   ['app_navigationTree_settings_filter_description', '查看过滤字段'],
   ['app_navigationTree_settings_filter_all_title', '查看收缩项'],

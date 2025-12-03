@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -109,17 +109,17 @@ export const RenameDialog: DialogComponent<RenameDialogPayload, string> = observ
         <Form ref={focusedRef} onSubmit={() => resolveDialog(state.name)}>
           <Container center>
             <InputField name="name" state={state} error={!state.valid} description={errorMessage} onChange={() => state.validate().catch(() => {})}>
-              {translate('ui_name') + ':'}
+              {translate('ui_name')}
             </InputField>
           </Container>
         </Form>
       </CommonDialogBody>
       <CommonDialogFooter className={s(styles, { footer: true })}>
-        <Button type="button" mod={['outlined']} onClick={rejectDialog}>
+        <Button type="button" variant="secondary" onClick={() => rejectDialog()}>
           {translate('ui_processing_cancel')}
         </Button>
         <Fill />
-        <Button type="button" mod={['unelevated']} disabled={!state.valid} onClick={() => resolveDialog(state.name)}>
+        <Button type="button" disabled={!state.valid} onClick={() => resolveDialog(state.name)}>
           {translate(confirmActionText || (create ? 'ui_create' : 'ui_rename'))}
         </Button>
       </CommonDialogFooter>

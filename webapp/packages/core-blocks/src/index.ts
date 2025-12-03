@@ -1,12 +1,15 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-export { useHotkeys } from 'react-hotkeys-hook';
 
+import './module.js';
+
+export * from './AuthenticationProviderLoader.js';
+export * from './useAuthenticationAction.js';
 export * from './CommonDialog/CommonDialog/CommonDialogBody.js';
 export * from './CommonDialog/CommonDialog/CommonDialogFooter.js';
 export * from './CommonDialog/CommonDialog/CommonDialogHeader.js';
@@ -16,12 +19,12 @@ export { default as ConfirmationDialogStyles } from './CommonDialog/Confirmation
 export * from './CommonDialog/ConfirmationDialogDelete.js';
 export * from './CommonDialog/RenameDialog.js';
 export * from './CommonDialog/DialogsPortal.js';
+export * from './ExportImageDialog/ExportImageDialogLazy.js';
+export * from './ExportImageDialog/ExportImageFormats.js';
 
 export * from './ErrorDetailsDialog/ErrorDetailsDialog.js';
 
 export * from './ComponentsRegistry/CRegistryLoader.js';
-// we don't expect to use this component directly only as a wrapper for another component
-// eslint-disable-next-line @cloudbeaver/no-sync-component-import
 export * from './ComponentsRegistry/registry.js';
 export * from './ComponentsRegistry/CRegistryList.js';
 export * from './ComponentsRegistry/IComponentsTreeNodeValidator.js';
@@ -32,6 +35,8 @@ export * from './ComplexLoader.js';
 export * from './DisplayError.js';
 export * from './ErrorBoundary.js';
 export * from './Icon.js';
+export * from './useHotkeys.js';
+export * from './useSync.js';
 
 export * from './ItemList/ItemList.js';
 export * from './ItemList/ItemListSearch.js';
@@ -52,13 +57,13 @@ export * from './localization/useTranslate.js';
 export * from './ConnectionImageWithMask/ConnectionImageWithMask.js';
 export { default as ConnectionImageWithMaskSvgStyles } from './ConnectionImageWithMask/ConnectionImageWithMaskSvg.module.css';
 
+export * from './Menu/AriaKit/MenuAriaKit.js';
 export * from './Menu/Menu.js';
 export { default as MenuStyles } from './Menu/Menu.module.css';
 export * from './Menu/MenuBarSmallItem.js';
 export * from './Menu/MenuEmptyItem.js';
 export * from './Menu/MenuItem.js';
 export { default as MenuItemStyles } from './Menu/MenuItem.module.css';
-export { default as MenuPanelItemAndTriggerStyles } from './MenuPanel/shared/MenuPanelItemAndTrigger.module.css';
 export * from './Menu/MenuItemCheckbox.js';
 export * from './Menu/MenuItemElement.js';
 export { default as MenuItemElementStyles } from './Menu/MenuItemElement.module.css';
@@ -68,8 +73,7 @@ export { default as MenuPanelStyles } from './Menu/MenuPanel.module.css';
 export * from './Menu/MenuSeparator.js';
 export { default as MenuSeparatorStyles } from './Menu/MenuSeparator.module.css';
 export * from './Menu/MenuStateContext.js';
-export * from './Menu/useMouseContextMenu.js';
-export { MenuTrigger, type MenuState } from './MenuPanel/MenuTrigger.js';
+export * from './Menu/useContextMenuPosition.js';
 
 export * from './ObjectPropertyInfo/ObjectPropertyInfoForm/ObjectPropertyInfoFormLoader.js';
 export * from './ObjectPropertyInfo/useObjectPropertyCategories.js';
@@ -83,6 +87,7 @@ export * from './Overlay/OverlayHeaderTitle.js';
 export * from './Overlay/OverlayMessage.js';
 
 export * from './Placeholder/Placeholder.js';
+export * from './Placeholder/usePlaceholder.js';
 export * from './Placeholder/PlaceholderContainer.js';
 
 export * from './PropertiesTable/PropertiesTable.js';
@@ -133,12 +138,12 @@ export * from './Tree/TreeNode/TreeNodeControl.js';
 export * from './Tree/TreeNode/TreeNodeExpand.js';
 export * from './Tree/TreeNode/TreeNodeIcon.js';
 export * from './Tree/TreeNode/TreeNodeName.js';
+export * from './Tree/TreeNode/TreeNodeDescription.js';
 export * from './Tree/TreeNode/TreeNodeNested.js';
 export * from './Tree/TreeNode/TreeNodeNestedMessage.js';
 export * from './Tree/TreeNode/TreeNodeSelect.js';
 export * from './Button.js';
 export * from './Text.js';
-export { default as ButtonStyles } from './Button.module.css';
 export * from './ToolsPanel/ToolsAction.js';
 export * from './ToolsPanel/ToolsPanel.js';
 export { default as ToolsPanelStyles } from './ToolsPanel/ToolsPanel.module.css';
@@ -175,6 +180,7 @@ export * from './FolderExplorer/useFolderExplorer.js';
 export * from './Tags/Tag.js';
 export * from './Tags/Tags.js';
 
+export * from './FormControls/SelectLoader.js';
 export * from './FormControls/ComboboxLoader.js';
 export * from './FormControls/FormContext.js';
 export * from './FormControls/FormFieldDescription.js';
@@ -184,8 +190,6 @@ export * from './FormControls/InputFiles.js';
 export * from './FormControls/InputFileTextContent.js';
 export * from './FormControls/Radio.js';
 export * from './FormControls/RadioGroup.js';
-export * from './FormControls/RadioGroupContext.js';
-export * from './FormControls/ShadowInput.js';
 export * from './FormControls/Form.js';
 export * from './FormControls/Textarea.js';
 export * from './FormControls/useCapsLockTracker.js';
@@ -250,8 +254,14 @@ export * from './useUserData.js';
 export * from './useListKeyboardNavigation.js';
 export * from './useMergeRefs.js';
 export * from './usePasswordValidation.js';
-export * from './manifest.js';
 export * from './importLazyComponent.js';
 export * from './ClickableLoader.js';
 export * from './FormControls/TagsComboboxLoader.js';
 export * from './Flex/Flex.js';
+export * from './FormControls/useInputAutocomplete.js';
+export * from './FormControls/InputAutocompletionMenu.js';
+export * from './useSearch.js';
+export * from './useObjectInfoTooltip.js';
+export * from './Alert.js';
+export * from './ObjectPropertyInfo/evaluate.js';
+export * from './ObjectPropertyInfo/getObjectPropertyDefaults.js';

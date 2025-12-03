@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -12,13 +12,16 @@ import { useMemo } from 'react';
 import { ActionIconButton, Button, Container, Fill, Loader, s, useS, useSuspense, useTranslate } from '@cloudbeaver/core-blocks';
 import { type TabContainerPanelComponent, useTabLocalState } from '@cloudbeaver/core-ui';
 import { blobToBase64, bytesToSize, throttle } from '@cloudbeaver/core-utils';
+import { isResultSetContentValue } from '@dbeaver/result-set-api';
 
-import { isResultSetContentValue } from '../../DatabaseDataModel/Actions/ResultSet/isResultSetContentValue.js';
 import { isResultSetDataModel } from '../../ResultSet/isResultSetDataModel.js';
 import type { IDataValuePanelProps } from '../../TableViewer/ValuePanel/DataValuePanelService.js';
 import { QuotaPlaceholder } from '../QuotaPlaceholder.js';
 import styles from './ImageValuePresentation.module.css';
 import { useValuePanelImageValue } from './useValuePanelImageValue.js';
+import type { IResultSetValue } from '../../DatabaseDataModel/Actions/ResultSet/ResultSetFormatAction.js';
+import type { IGridDataKey } from '../../DatabaseDataModel/Actions/Grid/IGridDataKey.js';
+import type { IDatabaseValueHolder } from '../../DatabaseDataModel/Actions/IDatabaseValueHolder.js';
 
 export const ImageValuePresentation: TabContainerPanelComponent<IDataValuePanelProps> = observer(function ImageValuePresentation({
   model: unknownModel,
@@ -47,9 +50,12 @@ export const ImageValuePresentation: TabContainerPanelComponent<IDataValuePanelP
   );
   const data = useValuePanelImageValue({ model, resultIndex });
   const loading = model.isLoading();
-  const valueSize = bytesToSize(isResultSetContentValue(data.cellValue) ? data.cellValue.contentLength ?? 0 : 0);
+  const valueSize = bytesToSize(isResultSetContentValue(data.cellValue) ? (data.cellValue.contentLength ?? 0) : 0);
   const isTruncatedMessageDisplay = !!data.truncated && !data.src;
-  const isDownloadable = isTruncatedMessageDisplay && !!data.selectedCell && data.contentAction.isDownloadable(data.selectedCell);
+  const isDownloadable =
+    isTruncatedMessageDisplay &&
+    !!data.selectedCell &&
+    data.contentAction.isDownloadable(data.cellHolder as IDatabaseValueHolder<IGridDataKey, IResultSetValue>);
   const isCacheDownloading = isDownloadable && data.contentAction.isLoading(data.selectedCell);
   const debouncedDownload = useMemo(() => throttle(() => data.download(), 1000, false), []);
   const srcGetter = suspense.observedValue(
@@ -81,9 +87,9 @@ export const ImageValuePresentation: TabContainerPanelComponent<IDataValuePanelP
             />
           )}
           {isTruncatedMessageDisplay && (
-            <QuotaPlaceholder model={data.model} resultIndex={data.resultIndex} elementKey={data.selectedCell}>
+            <QuotaPlaceholder model={data.model} resultIndex={data.resultIndex} holder={data.cellHolder}>
               {isDownloadable && (
-                <Button disabled={loading} loading={isCacheDownloading} loader onClick={data.loadFullImage}>
+                <Button variant="secondary" disabled={loading} loading={isCacheDownloading} loader onClick={data.loadFullImage}>
                   {`${translate('ui_view')} (${valueSize})`}
                 </Button>
               )}

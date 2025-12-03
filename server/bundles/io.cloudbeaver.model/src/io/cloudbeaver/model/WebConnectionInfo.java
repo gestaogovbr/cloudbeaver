@@ -16,15 +16,17 @@
  */
 package io.cloudbeaver.model;
 
+import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebProjectImpl;
 import io.cloudbeaver.model.app.BaseWebAppConfiguration;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.service.security.SMUtils;
 import io.cloudbeaver.service.sql.WebDataFormat;
 import io.cloudbeaver.utils.CBModelConstants;
-import io.cloudbeaver.utils.WebAppUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
 import io.cloudbeaver.utils.WebCommonUtils;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.*;
@@ -76,6 +78,8 @@ public class WebConnectionInfo {
     private String connectTime;
     private String serverVersion;
     private String clientVersion;
+    @Nullable
+    private Boolean credentialsSavedInSession;
 
     private transient Map<String, Object> savedAuthProperties;
     private transient List<WebNetworkHandlerConfigInput> savedNetworkCredentials;
@@ -169,11 +173,6 @@ public class WebConnectionInfo {
     }
 
     @Property
-    public boolean isTemplate() {
-        return dataSourceContainer.isTemplate();
-    }
-
-    @Property
     public boolean isProvided() {
         return dataSourceContainer.isProvided();
     }
@@ -195,7 +194,8 @@ public class WebConnectionInfo {
 
     @Property
     public boolean isCredentialsSaved() throws DBException {
-        return dataSourceContainer.isCredentialsSaved();
+        // isCredentialsSaved can be true if credentials were saved during connection init for global project
+        return dataSourceContainer.isCredentialsSaved() && !(credentialsSavedInSession != null && credentialsSavedInSession);
     }
 
     @Property
@@ -252,6 +252,7 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public String[] getFeatures() {
         List<String> features = new ArrayList<>();
 
@@ -281,11 +282,13 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public DBNBrowseSettings getNavigatorSettings() {
         return dataSourceContainer.getNavigatorSettings();
     }
 
     @Property
+    @NotNull
     public List<WebDataFormat> getSupportedDataFormats() {
         List<WebDataFormat> formats = new ArrayList<>();
         formats.add(WebDataFormat.resultset);
@@ -300,11 +303,13 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public WebConnectionOriginInfo getOrigin() {
         return new WebConnectionOriginInfo(session, dataSourceContainer, dataSourceContainer.getOrigin());
     }
 
     @Property
+    @NotNull
     public DBPDriverConfigurationType getConfigurationType() {
         DBPDriverConfigurationType configurationType = dataSourceContainer.getConnectionConfiguration().getConfigurationType();
         if (configurationType == null) {
@@ -320,12 +325,17 @@ public class WebConnectionInfo {
             !dataSourceContainer.getDriver().isAnonymousAccess();
     }
 
+    public void validateConnection() throws DBWebException {
+
+    }
+
     // we don't show non-secured properties in FE when connecting to DB without saved credentials
     private boolean isAuthPropertiesEmpty() {
         return Arrays.stream(getAuthProperties()).allMatch(f -> f.hasFeature(DBConstants.PROP_FEATURE_NON_SECURED));
     }
 
     @Property
+    @NotNull
     public String getAuthModel() {
         String authModelId = dataSourceContainer.getConnectionConfiguration().getAuthModelId();
         if (CommonUtils.isEmpty(authModelId)) {
@@ -335,6 +345,7 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public WebPropertyInfo[] getAuthProperties() {
         String authModelId = getAuthModel();
         DBPAuthModelDescriptor authModel = DBWorkbench.getPlatform().getDataSourceProviderRegistry().getAuthModel(authModelId);
@@ -357,6 +368,7 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public List<WebNetworkHandlerConfig> getNetworkHandlersConfig() {
         var registry = NetworkHandlerRegistry.getInstance();
         return dataSourceContainer.getConnectionConfiguration()
@@ -371,20 +383,23 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @Nullable
     public Map<String, Object> getCredentials() {
         //dataSourceContainer.getConnectionConfiguration().getCredentialsProvider().getCredentials();
         return null;
     }
 
+    @Nullable
     public Map<String, Object> getSavedAuthProperties() {
         return savedAuthProperties;
     }
 
+    @Nullable
     public List<WebNetworkHandlerConfigInput> getSavedNetworkCredentials() {
         return savedNetworkCredentials;
     }
 
-    public void setSavedCredentials(Map<String, Object> authProperties, List<WebNetworkHandlerConfigInput> networkCredentials) {
+    public void setSavedCredentials(@Nullable Map<String, Object> authProperties, @Nullable List<WebNetworkHandlerConfigInput> networkCredentials) {
         this.savedAuthProperties = authProperties;
         this.savedNetworkCredentials = networkCredentials;
     }
@@ -409,6 +424,7 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @NotNull
     public Map<String, String> getMainPropertyValues() {
         Map<String, String> mainProperties = new LinkedHashMap<>();
         mainProperties.put(DBConstants.PROP_HOST, getHost());
@@ -416,6 +432,17 @@ public class WebConnectionInfo {
         mainProperties.put(DBConstants.PROP_DATABASE, getDatabaseName());
         mainProperties.put(DBConstants.PROP_SERVER, getServerName());
         return mainProperties;
+    }
+
+    @Property
+    public Map<String, Object> getExpertSettingsValues() {
+        Map<String, Object> expertSettings = new LinkedHashMap<>();
+        expertSettings.put(WebExpertSettingsProperties.PROP_AUTO_COMMIT, isAutocommit());
+        expertSettings.put(WebExpertSettingsProperties.PROP_KEEP_ALIVE_INTERVAL, getKeepAliveInterval());
+        expertSettings.put(WebExpertSettingsProperties.PROP_READ_ONLY, isReadOnly());
+        expertSettings.put(WebExpertSettingsProperties.PROP_DEFAULT_CATALOG, getDefaultCatalogName());
+        expertSettings.put(WebExpertSettingsProperties.PROP_DEFAULT_SCHEMA, getDefaultSchemaName());
+        return expertSettings;
     }
 
     @Property
@@ -453,7 +480,7 @@ public class WebConnectionInfo {
         return dataSourceContainer.getRequiredExternalAuth();
     }
 
-    private boolean hasProjectPermission(RMProjectPermission projectPermission) {
+    private boolean hasProjectPermission(@NotNull RMProjectPermission projectPermission) {
         DBPProject project = dataSourceContainer.getProject();
         if (!(project instanceof WebProjectImpl webProject)) {
             return false;
@@ -465,7 +492,8 @@ public class WebConnectionInfo {
         if (isCanEdit()) {
             return true;
         }
-        BaseWebAppConfiguration appConfig = (BaseWebAppConfiguration) WebAppUtils.getWebApplication().getAppConfiguration();
+        BaseWebAppConfiguration appConfig = (BaseWebAppConfiguration) ServletAppUtils.getServletApplication()
+            .getAppConfiguration();
         return appConfig.isShowReadOnlyConnectionInfo();
 
     }
@@ -492,6 +520,21 @@ public class WebConnectionInfo {
     }
 
     @Property
+    @Nullable
+    public String getDefaultCatalogName() {
+        DBPConnectionConfiguration connectionConfiguration = dataSourceContainer.getConnectionConfiguration();
+        return connectionConfiguration.getBootstrap().getDefaultCatalogName();
+    }
+
+    @Property
+    @Nullable
+    public String getDefaultSchemaName() {
+        DBPConnectionConfiguration connectionConfiguration = dataSourceContainer.getConnectionConfiguration();
+        return connectionConfiguration.getBootstrap().getDefaultSchemaName();
+    }
+
+    @Property
+    @NotNull
     public List<WebSecretInfo> getSharedSecrets() throws DBException {
         return dataSourceContainer.listSharedCredentials()
             .stream()
@@ -499,8 +542,8 @@ public class WebConnectionInfo {
             .collect(Collectors.toList());
     }
 
-    @NotNull
     @Property
+    @NotNull
     public List<String> getTools() {
         if (!session.hasPermission(RMConstants.PERMISSION_DATABASE_DEVELOPER)) {
             return List.of();
@@ -513,4 +556,10 @@ public class WebConnectionInfo {
         return tools;
     }
 
+    /**
+     * Updates param that checks whether credentials were saved only in session.
+     */
+    public void setCredentialsSavedInSession(@Nullable Boolean credentialsSavedInSession) {
+        this.credentialsSavedInSession = credentialsSavedInSession;
+    }
 }

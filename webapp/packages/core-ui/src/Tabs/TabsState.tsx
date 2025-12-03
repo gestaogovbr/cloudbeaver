@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,8 @@ import { useTabState } from 'reakit';
 import { useAutoLoad, useExecutor, useObjectRef, useObservableRef } from '@cloudbeaver/core-blocks';
 import { useDataContext } from '@cloudbeaver/core-data-context';
 import { Executor, ExecutorInterrupter } from '@cloudbeaver/core-executor';
-import { isDefined, isNotNullDefined, MetadataMap, type MetadataValueGetter, schema } from '@cloudbeaver/core-utils';
+import { MetadataMap, type MetadataValueGetter, schema } from '@cloudbeaver/core-utils';
+import { isDefined, isNotNullDefined } from '@dbeaver/js-helpers';
 
 import type { ITabData, ITabInfo, ITabsContainer } from './TabsContainer/ITabsContainer.js';
 import { type ITabsContext, type TabDirection, TabsContext } from './TabsContext.js';
@@ -23,8 +24,10 @@ type ExtractContainerProps<T> = T extends void ? Record<string, any> : T;
 
 export type TabsStateProps<T = Record<string, any>> = ExtractContainerProps<T> &
   React.PropsWithChildren<{
+    /** Default selected tab id */
     selectedId?: string;
     orientation?: 'horizontal' | 'vertical';
+    /** Provide a tab Id to control tabs state */
     currentTabId?: string | null;
     container?: ITabsContainer<T, any>;
     localState?: MetadataMap<string, any>;
@@ -33,9 +36,12 @@ export type TabsStateProps<T = Record<string, any>> = ExtractContainerProps<T> &
     autoSelect?: boolean;
     tabList?: string[];
     enabledBaseActions?: boolean;
+    reorderStateKey?: string;
+    sortFunction?: (tabs: string[]) => string[];
     canClose?: (tab: ITabData<T>) => boolean;
     onChange?: (tab: ITabData<T>) => void;
     onClose?: (tab: ITabData<T>) => void;
+    onReorder?: (draggedTabId: string, targetTabId: string, position: 'before' | 'after') => void;
   }>;
 
 export const TabsState = observer(function TabsState<T = Record<string, any>>({
@@ -50,19 +56,27 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
   manual,
   tabList,
   enabledBaseActions,
+  reorderStateKey,
+  sortFunction,
   onChange: onOpen,
   onClose,
   canClose,
+  onReorder,
   ...rest
 }: TabsStateProps<T>): React.ReactElement | null {
   const context = useDataContext();
   const props = useMemo(() => rest as any as T, [...Object.values(rest)]);
+
   let displayed: string[] = [];
 
   if (container) {
     displayed = container.getIdList(props);
   } else if (tabList) {
     displayed = tabList;
+  }
+
+  if (sortFunction) {
+    displayed = sortFunction(displayed);
   }
 
   const closable = !!onClose;
@@ -86,6 +100,7 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       canClose,
       open: onOpen,
       close: onClose,
+      reorder: onReorder,
       props,
       tabsState,
       container,
@@ -164,10 +179,13 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       getTabInfo(tabId: string) {
         return dynamic.container?.getDisplayedTabInfo(tabId, dynamic.props);
       },
-      getTabState(tabId: string, valueGetter?: MetadataValueGetter<string, any>, schema?: schema.AnyZodObject) {
+      getTabState(tabId: string, valueGetter?: MetadataValueGetter<string, any>, schema?: schema.ZodObject) {
         return dynamic.container?.getTabState(dynamic.tabsState, tabId, dynamic.props, valueGetter, schema);
       },
-      getLocalState(tabId: string, valueGetter?: MetadataValueGetter<string, any>, schema?: schema.AnyZodObject) {
+      setTabState(tabId: string, value: any) {
+        return dynamic.container?.setTabState(dynamic.tabsState, tabId, value);
+      },
+      getLocalState(tabId: string, valueGetter?: MetadataValueGetter<string, any>, schema?: schema.ZodObject) {
         return dynamic.tabsState.get(tabId, valueGetter, schema);
       },
       async open(tabId: string) {
@@ -216,6 +234,11 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
           }
         }
       },
+      reorder(draggedTabId: string, targetTabId: string, position: 'before' | 'after') {
+        dynamic.reorder?.(draggedTabId, targetTabId, position);
+      },
+      reorderStateKey,
+      sortFunction,
     }),
     {
       state: observable.ref,
@@ -228,6 +251,8 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       closable: observable.ref,
       tabList: observable.ref,
       enabledBaseActions: observable.ref,
+      reorderStateKey: observable.ref,
+      sortFunction: observable.ref,
       getTabInfo: action.bound,
       getTabState: action.bound,
       getLocalState: action.bound,
@@ -236,6 +261,7 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       closeAll: action.bound,
       closeAllToTheDirection: action.bound,
       closeOthers: action.bound,
+      reorder: action.bound,
     },
     {
       state,
@@ -248,32 +274,33 @@ export const TabsState = observer(function TabsState<T = Record<string, any>>({
       closable,
       tabList,
       enabledBaseActions,
+      reorderStateKey,
+      sortFunction,
     },
   );
 
+  let currentTabInfo: ITabInfo<T, unknown> | undefined;
   if (container) {
-    let currentTabInfo: ITabInfo<T, never> | undefined;
-
     if (state.selectedId) {
       currentTabInfo = value.getTabInfo(state.selectedId);
     }
-
-    useAutoLoad(
-      TabsState,
-      container
-        .getDisplayed(props)
-        .map(tab => tab.getLoader?.(context, props))
-        .filter(isDefined)
-        .flat(),
-    );
-
-    useAutoLoad(
-      TabsState,
-      [currentTabInfo?.getLoader?.(context, props) || []].flat().filter(loader => loader.lazy),
-      true,
-      true,
-    );
   }
+
+  useAutoLoad(
+    TabsState,
+    container?.tabInfoList
+      .map(tab => tab.getLoader?.(context, props))
+      .filter(isDefined)
+      .flat() || [],
+    !!container,
+  );
+
+  useAutoLoad(
+    TabsState,
+    [currentTabInfo?.getLoader?.(context, props) || []].flat().filter(loader => loader.lazy),
+    !!container,
+    true,
+  );
 
   return (
     <TabsContext.Provider value={value}>

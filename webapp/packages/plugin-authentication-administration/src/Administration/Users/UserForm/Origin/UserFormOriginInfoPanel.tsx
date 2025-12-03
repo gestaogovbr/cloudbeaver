@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@ import { Fragment } from 'react';
 import { type AdminUserOrigin, UsersOriginDetailsResource, UsersResource } from '@cloudbeaver/core-authentication';
 import {
   Button,
-  Combobox,
+  Select,
   ConfirmationDialog,
   Container,
   Group,
@@ -73,7 +73,7 @@ export const UserFormOriginInfoPanel: TabContainerPanelComponent<UserFormProps> 
   }
 
   async function deleteHandler() {
-    const result = await commonDialogService.open(ConfirmationDialog, {
+    const { status } = await commonDialogService.open(ConfirmationDialog, {
       title: 'ui_data_delete_confirmation',
       message: translate('authentication_administration_user_delete_credentials_confirmation_message', undefined, {
         originName: origin?.displayName,
@@ -82,7 +82,7 @@ export const UserFormOriginInfoPanel: TabContainerPanelComponent<UserFormProps> 
       confirmActionText: 'ui_delete',
     });
 
-    if (result !== DialogueStateResult.Rejected) {
+    if (status !== DialogueStateResult.Rejected) {
       try {
         await userInfoLoader.resource.deleteCredentials(state.userId!, origin!.type!);
         notificationService.logSuccess({ title: 'authentication_administration_user_delete_credentials_success' });
@@ -95,7 +95,7 @@ export const UserFormOriginInfoPanel: TabContainerPanelComponent<UserFormProps> 
   return (
     <Container>
       <Group gap medium overflow>
-        <Combobox
+        <Select
           state={localState}
           name="selectedOrigin"
           items={origins}
@@ -105,7 +105,7 @@ export const UserFormOriginInfoPanel: TabContainerPanelComponent<UserFormProps> 
           tiny
         >
           {translate('authentication_administration_user_auth_method')}
-        </Combobox>
+        </Select>
         {origins.length === 0 && <GroupItem>{translate('authentication_administration_user_auth_methods_empty')}</GroupItem>}
         {origin && (
           <Fragment>
@@ -121,7 +121,7 @@ export const UserFormOriginInfoPanel: TabContainerPanelComponent<UserFormProps> 
               </Container>
             </Container>
             <GroupItem>
-              <Button type="button" mod={['outlined']} onClick={deleteHandler}>
+              <Button type="button" variant="secondary" onClick={deleteHandler}>
                 {translate('ui_delete')}
               </Button>
             </GroupItem>

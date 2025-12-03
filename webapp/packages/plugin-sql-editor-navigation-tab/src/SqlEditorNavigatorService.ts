@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,13 @@ import { Executor, type IExecutionContextProvider, type IExecutor } from '@cloud
 import { NavigationService } from '@cloudbeaver/core-ui';
 import { uuid } from '@cloudbeaver/core-utils';
 import { type ITab, NavigationTabsService } from '@cloudbeaver/plugin-navigation-tabs';
-import { type ISqlEditorTabState, MemorySqlDataSource, SqlDataSourceService, SqlResultTabsService } from '@cloudbeaver/plugin-sql-editor';
+import {
+  type ISqlEditorTabState,
+  MemorySqlDataSource,
+  SqlDataSourceService,
+  SqlQueryService,
+  SqlResultTabsService,
+} from '@cloudbeaver/plugin-sql-editor';
 
 import { isSQLEditorTab } from './isSQLEditorTab.js';
 import { SQL_EDITOR_SOURCE_ACTION } from './SQL_EDITOR_SOURCE_ACTION.js';
@@ -36,6 +42,8 @@ export interface ISQLEditorOptions {
   schemaId?: string;
   source?: string;
   query?: string;
+  dataSourceState?: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 export interface SQLCreateAction extends SQLEditorActionContext, ISQLEditorOptions {
@@ -49,7 +57,16 @@ export interface SQLEditorAction extends SQLEditorActionContext {
   resultId: string;
 }
 
-@injectable()
+@injectable(() => [
+  NavigationTabsService,
+  NotificationService,
+  SqlEditorTabService,
+  SqlResultTabsService,
+  ConnectionInfoResource,
+  NavigationService,
+  SqlDataSourceService,
+  SqlQueryService,
+])
 export class SqlEditorNavigatorService {
   private readonly navigator: IExecutor<SQLCreateAction | SQLEditorAction>;
 
@@ -61,6 +78,7 @@ export class SqlEditorNavigatorService {
     private readonly connectionInfoResource: ConnectionInfoResource,
     navigationService: NavigationService,
     private readonly sqlDataSourceService: SqlDataSourceService,
+    private readonly sqlQueryService: SqlQueryService,
   ) {
     this.navigator = new Executor<SQLCreateAction | SQLEditorAction>(null, (active, current) => active.type === current.type)
       .before(navigationService.navigationTask)
@@ -88,6 +106,26 @@ export class SqlEditorNavigatorService {
       editorId,
       resultId,
     });
+  }
+
+  async executeEditorQuery(editorId: string, query: string, isNewTab = true): Promise<void> {
+    const currentTab = this.navigationTabsService.findTab(isSQLEditorTab(tab => tab.id === editorId));
+
+    if (!currentTab) {
+      throw new Error(`SQL Editor tab with id "${editorId}" not found.`);
+    }
+
+    await this.sqlQueryService.executeEditorQuery(currentTab.handlerState, query, isNewTab);
+  }
+
+  async executeQueries(editorId: string, queries: string[]): Promise<void> {
+    const currentTab = this.navigationTabsService.findTab(isSQLEditorTab(tab => tab.id === editorId));
+
+    if (!currentTab) {
+      throw new Error(`SQL Editor tab with id "${editorId}" not found.`);
+    }
+
+    await this.sqlQueryService.executeQueries(currentTab.handlerState, queries);
   }
 
   private async navigateHandler(data: SQLCreateAction | SQLEditorAction, contexts: IExecutionContextProvider<SQLCreateAction | SQLEditorAction>) {
@@ -125,6 +163,8 @@ export class SqlEditorNavigatorService {
             data.name,
             data.source,
             data.query,
+            data.dataSourceState,
+            data.metadata,
           );
 
           if (tabOptions) {

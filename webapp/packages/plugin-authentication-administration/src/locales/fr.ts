@@ -1,11 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
+  ['authentication_administration_pages_label', 'Pages'],
   ['authentication_administration_user_connections_user_add', "Création d'utilisateur"],
   ['authentication_administration_user_connections_user_new', 'Nouvel utilisateur'],
   ['authentication_administration_user_connections_access_load_fail', "Échec du chargement des connexions accordées à l'utilisateur"],
@@ -86,7 +80,7 @@ export default [
   ],
 
   ['administration_identity_providers_tab_title', "Fournisseurs d'identité"],
-  ['administration_identity_providers_provider', 'Fournisseur'],
+  ['administration_identity_providers_provider', 'Type de fournisseur'],
   ['administration_identity_providers_provider_id', 'ID'],
   ['administration_identity_providers_provider_configuration_name', 'Nom de la configuration'],
   ['administration_identity_providers_provider_configuration_disabled', 'Désactivé'],
@@ -134,4 +128,13 @@ export default [
   ],
   ['plugin_authentication_administration_team_form_edit_label', 'Team editing form'],
   ['plugin_authentication_administration_user_form_edit_label', 'User editing form'],
+
+  [
+    'plugin_authentication_administration_user_username_validation_error',
+    "User's name may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
+  [
+    'plugin_authentication_administration_team_id_validation_error',
+    "Team's ID may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
 ];

@@ -5,11 +5,11 @@ MAINTAINER DBeaver Corp, devops@dbeaver.com
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN set -eux; \
-    apt-get update; \
+    apt-get update && \
+    apt-get dist-upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends \
         # curl required for historical reasons, see https://github.com/adoptium/containers/issues/255
         curl \
-        wget \
         # java.lang.UnsatisfiedLinkError: libfontmanager.so: libfreetype.so.6: cannot open shared object file: No such file or directory
         # java.lang.NoClassDefFoundError: Could not initialize class sun.awt.X11FontManager
         # https://github.com/docker-library/openjdk/pull/235#issuecomment-424466077
@@ -23,8 +23,7 @@ RUN set -eux; \
         tzdata \
         # locales ensures proper character encoding and locale-specific behaviors using en_US.UTF-8
         locales \
-        nano \
-    ; \
+        nano && \
     echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen; \
     locale-gen en_US.UTF-8; \
     rm -rf /var/lib/apt/lists/*
@@ -32,7 +31,7 @@ RUN set -eux; \
 ENV LANG=en_US.UTF-8
 
 ENV JAVA_HOME=/opt/java/openjdk
-COPY --from=eclipse-temurin:17 $JAVA_HOME $JAVA_HOME
+COPY --from=eclipse-temurin:21 $JAVA_HOME $JAVA_HOME
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 RUN set -eux; \

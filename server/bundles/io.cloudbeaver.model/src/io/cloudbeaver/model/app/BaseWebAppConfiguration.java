@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,21 +18,25 @@ package io.cloudbeaver.model.app;
 
 import io.cloudbeaver.DBWFeatureSet;
 import io.cloudbeaver.registry.WebFeatureRegistry;
+import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
+import org.jkiss.dbeaver.model.DBConstants;
 import org.jkiss.utils.ArrayUtils;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public abstract class BaseWebAppConfiguration implements WebAppConfiguration {
+public abstract class BaseWebAppConfiguration implements ServletAppConfiguration {
     public static final String DEFAULT_APP_ANONYMOUS_TEAM_NAME = "user";
 
     protected final Map<String, Object> plugins;
     protected String defaultUserTeam = DEFAULT_APP_ANONYMOUS_TEAM_NAME;
     protected boolean resourceManagerEnabled;
+    protected boolean secretManagerEnabled;
     protected boolean showReadOnlyConnectionInfo;
     protected String[] enabledFeatures;
+    protected String[] disabledFeatures;
     protected String[] disabledBetaFeatures;
 
 
@@ -40,8 +44,10 @@ public abstract class BaseWebAppConfiguration implements WebAppConfiguration {
         this.plugins = new LinkedHashMap<>();
         this.resourceManagerEnabled = true;
         this.enabledFeatures = null;
+        this.disabledFeatures = new String[0];
         this.disabledBetaFeatures = new String[0];
         this.showReadOnlyConnectionInfo = false;
+        this.secretManagerEnabled = false;
     }
 
     public BaseWebAppConfiguration(BaseWebAppConfiguration src) {
@@ -49,8 +55,10 @@ public abstract class BaseWebAppConfiguration implements WebAppConfiguration {
         this.defaultUserTeam = src.defaultUserTeam;
         this.resourceManagerEnabled = src.resourceManagerEnabled;
         this.enabledFeatures = src.enabledFeatures;
+        this.disabledFeatures = src.disabledFeatures;
         this.disabledBetaFeatures = src.disabledBetaFeatures;
         this.showReadOnlyConnectionInfo = src.showReadOnlyConnectionInfo;
+        this.secretManagerEnabled = src.secretManagerEnabled;
     }
 
     @Override
@@ -85,7 +93,15 @@ public abstract class BaseWebAppConfiguration implements WebAppConfiguration {
     }
 
     @Override
+    public boolean isSecretManagerEnabled() {
+        return secretManagerEnabled;
+    }
+
+    @Override
     public boolean isFeatureEnabled(String id) {
+        if (DBConstants.PRODUCT_FEATURE_DISTRIBUTED.equals(id)) {
+            return ServletAppUtils.getServletApplication().isDistributed();
+        }
         return ArrayUtils.contains(getEnabledFeatures(), id);
     }
 
@@ -107,6 +123,16 @@ public abstract class BaseWebAppConfiguration implements WebAppConfiguration {
 
     public void setEnabledFeatures(String[] enabledFeatures) {
         this.enabledFeatures = enabledFeatures;
+    }
+
+    @NotNull
+    @Override
+    public String[] getDisabledFeatures() {
+        return disabledFeatures;
+    }
+
+    public void setDisabledFeatures(@NotNull String[] disabledFeatures) {
+        this.disabledFeatures = disabledFeatures;
     }
 
     public boolean isShowReadOnlyConnectionInfo() {

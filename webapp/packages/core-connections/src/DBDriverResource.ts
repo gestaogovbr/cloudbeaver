@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,8 +10,15 @@ import { computed, makeObservable } from 'mobx';
 import { AppAuthService } from '@cloudbeaver/core-authentication';
 import { injectable } from '@cloudbeaver/core-di';
 import { CachedMapAllKey, CachedMapResource, isResourceAlias, type ResourceKey, resourceKeyList, ResourceKeyUtils } from '@cloudbeaver/core-resource';
-import { ServerConfigResource } from '@cloudbeaver/core-root';
-import { type DatabaseDriverFragment, DriverConfigurationType, type DriverListQueryVariables, GraphQLService } from '@cloudbeaver/core-sdk';
+import { ServerConfigResource, WorkspaceConfigEventHandler } from '@cloudbeaver/core-root';
+import {
+  CbServerEventId,
+  type DatabaseDriverFragment,
+  DriverConfigurationType,
+  type DriverListQueryVariables,
+  type DriverPropertyInfoFragment,
+  GraphQLService,
+} from '@cloudbeaver/core-sdk';
 import { isArraysEqual } from '@cloudbeaver/core-utils';
 
 export type DBDriver = DatabaseDriverFragment;
@@ -21,7 +28,9 @@ export const NEW_DRIVER_SYMBOL = Symbol('new-driver');
 export type NewDBDriver = DBDriver & { [NEW_DRIVER_SYMBOL]: boolean; timestamp: number };
 export type DBDriverResourceIncludes = Omit<DriverListQueryVariables, 'driverId'>;
 
-@injectable()
+export type DriverPropertyInfo = DriverPropertyInfoFragment;
+
+@injectable(() => [ServerConfigResource, GraphQLService, WorkspaceConfigEventHandler, AppAuthService])
 export class DBDriverResource extends CachedMapResource<string, DBDriver, DBDriverResourceIncludes> {
   get enabledDrivers() {
     return this.values.filter(driver => driver.enabled).sort(this.compare);
@@ -30,14 +39,25 @@ export class DBDriverResource extends CachedMapResource<string, DBDriver, DBDriv
   constructor(
     private readonly serverConfigResource: ServerConfigResource,
     private readonly graphQLService: GraphQLService,
+    private readonly workspaceConfigEventHandler: WorkspaceConfigEventHandler,
     appAuthService: AppAuthService,
   ) {
     super();
     appAuthService.requireAuthentication(this);
+
     this.sync(
       this.serverConfigResource,
       () => {},
       () => CachedMapAllKey,
+    );
+
+    this.workspaceConfigEventHandler.onEvent(
+      CbServerEventId.CbWorkspaceConfigChanged,
+      () => {
+        this.markOutdated(CachedMapAllKey);
+      },
+      undefined,
+      this,
     );
 
     makeObservable(this, {

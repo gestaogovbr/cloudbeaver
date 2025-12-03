@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,7 +9,7 @@ import { action, makeObservable, observable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
 import { PRODUCT_SETTINGS_LAYER } from '@cloudbeaver/core-product';
-import { createSettingsLayer, SettingsSource } from '@cloudbeaver/core-settings';
+import { createSettingsLayer, EditableSettingsSource } from '@cloudbeaver/core-settings';
 
 import { EAdminPermission } from '../EAdminPermission.js';
 import { ServerConfigResource } from '../ServerConfigResource.js';
@@ -17,8 +17,8 @@ import { SessionPermissionsResource } from '../SessionPermissionsResource.js';
 
 export const SERVER_SETTINGS_LAYER = createSettingsLayer(PRODUCT_SETTINGS_LAYER, 'server');
 
-@injectable()
-export class ServerSettingsService extends SettingsSource {
+@injectable(() => [ServerConfigResource, SessionPermissionsResource])
+export class ServerSettingsService extends EditableSettingsSource {
   private readonly settings: Map<string, any>;
   private lastConfig: any;
 
@@ -34,12 +34,15 @@ export class ServerSettingsService extends SettingsSource {
     makeObservable<this, 'settings' | 'refreshConfig'>(this, {
       refreshConfig: action,
       settings: observable.shallow,
-      clear: action,
     });
   }
 
   override has(key: any): boolean {
     return this.settings.has(key) || super.has(key);
+  }
+
+  isOverrideDefaults(): boolean {
+    return this.settings.size > 0;
   }
 
   isReadOnly(key: any): boolean {
@@ -50,17 +53,6 @@ export class ServerSettingsService extends SettingsSource {
     return this.settings.get(key);
   }
 
-  override clear(): void {
-    this.update(() => {
-      super.clear();
-      this.settings.clear();
-    });
-  }
-
-  resetChanges() {
-    super.clear();
-  }
-
   async save() {
     await this.serverConfigResource.updateProductConfiguration(Object.fromEntries(this.changes));
   }
@@ -69,9 +61,19 @@ export class ServerSettingsService extends SettingsSource {
     return Object.fromEntries(this.settings);
   }
 
+  restoreDefaults() {
+    this.update(() => {
+      this.clear();
+      for (const key of this.settings.keys()) {
+        this.resetValue(key);
+      }
+    });
+  }
+
   private refreshConfig() {
     this.update(() => {
       this.clear();
+      this.settings.clear();
 
       if (!this.serverConfigResource.data) {
         this.lastConfig = null;

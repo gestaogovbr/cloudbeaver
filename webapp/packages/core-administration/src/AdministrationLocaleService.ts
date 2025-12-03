@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,7 +8,7 @@
 import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { LocalizationService } from '@cloudbeaver/core-localization';
 
-@injectable()
+@injectable(() => [LocalizationService])
 export class AdministrationLocaleService extends Bootstrap {
   constructor(private readonly localizationService: LocalizationService) {
     super();
@@ -28,6 +28,8 @@ export class AdministrationLocaleService extends Bootstrap {
         return (await import('./locales/zh.js')).default;
       case 'fr':
         return (await import('./locales/fr.js')).default;
+      case 'vi':
+        return (await import('./locales/vi.js')).default;
       default:
         return (await import('./locales/en.js')).default;
     }

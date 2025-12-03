@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,23 @@ import {
   useObjectPropertyCategories,
   useTranslate,
 } from '@cloudbeaver/core-blocks';
-import { type ConnectionConfig, type DriverPropertyInfoFragment, getObjectPropertyType } from '@cloudbeaver/core-sdk';
+import { type DriverPropertyInfoFragment, getObjectPropertyType } from '@cloudbeaver/core-sdk';
+import type { IFormState } from '@cloudbeaver/core-ui';
+import type { IConnectionFormState } from '../IConnectionFormState.js';
+import { getConnectionFormOptionsPart } from './getConnectionFormOptionsPart.js';
 
 type DriverPropertyInfo = DriverPropertyInfoFragment;
 
 interface Props {
-  config: ConnectionConfig;
+  formState: IFormState<IConnectionFormState>;
   properties: DriverPropertyInfo[];
-  disabled?: boolean;
   readonly?: boolean;
 }
 
-export const ProviderPropertiesForm = observer<Props>(function ProviderPropertiesForm({ config, properties, disabled, readonly }) {
+export const ProviderPropertiesForm = observer<Props>(function ProviderPropertiesForm({ properties, readonly, formState }) {
   const translate = useTranslate();
+  const config = getConnectionFormOptionsPart(formState).state;
+  const disabled = formState.isDisabled;
   const supportedProperties = properties.filter(property => property.supportedConfigurationTypes?.some(type => type === config.configurationType));
 
   const { categories, isUncategorizedExists } = useObjectPropertyCategories(supportedProperties);
@@ -82,7 +86,7 @@ export const ProviderPropertiesForm = observer<Props>(function ProviderPropertie
                 category={category}
                 disabled={disabled}
                 readOnly={readonly}
-                geLayoutSize={property => (getObjectPropertyType(property) === 'checkbox' ? { maximum: true } : { small: true, noGrow: true })}
+                getLayoutSize={property => (getObjectPropertyType(property) === 'checkbox' ? { maximum: true } : { small: true, noGrow: true })}
                 hideEmptyPlaceholder
               />
             </Container>

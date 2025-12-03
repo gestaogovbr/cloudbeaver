@@ -1,12 +1,9 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['shortcuts_title', 'Raccourcis'],
+
+  ['plugin_help_welcome_docs_label', 'Documentation'],
+  ['plugin_help_welcome_docs_description', 'Apprenez à utiliser {arg:product}'],
+
   ['data_viewer_shortcut_start_inline_editing', "Ouvrir l'éditeur en ligne pour la cellule sélectionnée"],
   ['data_viewer_shortcut_add_new_row', 'Ajouter une nouvelle ligne'],
   ['data_viewer_shortcut_duplicate_row', 'Dupliquer la ligne'],
@@ -20,8 +17,8 @@ export default [
   ['sql_editor_shortcut_show_execution_plan', "Afficher le plan d'exécution"],
   ['sql_editor_shortcut_format', 'Formater le script'],
   ['sql_editor_shortcut_open_editor_in_new_tab', "Ouvrir l'éditeur SQL dans un nouvel onglet"],
-  ['sql_editor_shortcut_undo', 'Annuler'],
-  ['sql_editor_shortcut_redo', 'Rétablir'],
+  ['sql_editor_shortcut_find', 'Rechercher'],
+  ['sql_editor_shortcut_comment_uncomment_selection', 'Commenter/Décommenter la sélection'],
   ['navigation_tree_shortcut_enable_filter', 'Activer le filtrage'],
   ['plugin_help_multi_tab_support_title', "Le multi-onglet n'est pas supporté"],
   [

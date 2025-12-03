@@ -19,4 +19,10 @@
         <sessionHandler id="LocalSessionHandler" class="io.cloudbeaver.service.auth.local.LocalSessionHandler"/>
     </extension>
 
+    <extension point="org.jkiss.dbeaver.ws.event.handler">
+        <eventHandler class="io.cloudbeaver.service.auth.handler.WSAuthSessionEventHandler">
+            <topic id="cb_session_auth"/>
+        </eventHandler>
+    </extension>
+
 </plugin>

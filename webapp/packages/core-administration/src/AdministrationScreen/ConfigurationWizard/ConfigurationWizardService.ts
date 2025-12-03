@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import type { IAdministrationItem } from '../../AdministrationItem/IAdministrati
 import { orderAdministrationItems } from '../../AdministrationItem/orderAdministrationItems.js';
 import { AdministrationScreenService } from '../AdministrationScreenService.js';
 
-@injectable()
+@injectable(() => [AdministrationItemService, AdministrationScreenService, NotificationService])
 export class ConfigurationWizardService {
   get steps(): IAdministrationItem[] {
     return this.administrationItemService
@@ -157,17 +157,21 @@ export class ConfigurationWizardService {
   }
 
   private async finish() {
-    for (const step of this.steps) {
-      if (step?.configurationWizardOptions?.onConfigurationFinish) {
-        await step.configurationWizardOptions.onConfigurationFinish();
+    try {
+      for (const step of this.steps) {
+        if (step?.configurationWizardOptions?.onConfigurationFinish) {
+          await step.configurationWizardOptions.onConfigurationFinish();
+        }
       }
-    }
 
-    this.administrationScreenService.clearItemsState();
-    this.administrationScreenService.navigateToRoot();
-    this.notificationService.logSuccess({
-      title: 'administration_configuration_wizard_finish_success_title',
-      message: 'administration_configuration_wizard_finish_success_message',
-    });
+      this.administrationScreenService.clearItemsState();
+      this.administrationScreenService.navigateToRoot();
+      this.notificationService.logSuccess({
+        title: 'administration_configuration_wizard_finish_success_title',
+        message: 'administration_configuration_wizard_finish_success_message',
+      });
+    } catch (exception: any) {
+      this.notificationService.logException(exception, 'core_administration_configuration_wizard_finish_fail_title');
+    }
   }
 }

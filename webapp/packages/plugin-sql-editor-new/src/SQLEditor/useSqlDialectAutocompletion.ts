@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ const CLOSE_CHARACTERS = /[\s()[\]{};:>,=\\*]/;
 const COMPLETION_WORD = /[\w*]*/;
 
 export function useSqlDialectAutocompletion(data: ISQLEditorData): [Compartment, Extension] {
-  const { closeCompletion, useEditorAutocompletion } = useComplexLoader(codemirrorComplexLoader);
+  const { closeCompletion, useEditorAutocompletion, insertCompletionText } = useComplexLoader(codemirrorComplexLoader);
   const localizationService = useService(LocalizationService);
   const optionsRef = useObjectRef({ data });
 
@@ -33,15 +33,22 @@ export function useSqlDialectAutocompletion(data: ISQLEditorData): [Compartment,
       const wordLowerCase = word.toLocaleLowerCase();
       const hasSameName = proposals.some(
         ({ replacementString, displayString }) =>
-          displayString.toLocaleLowerCase() === wordLowerCase || replacementString.toLocaleLowerCase() === wordLowerCase,
+          sanitizeProposal(displayString) === wordLowerCase || replacementString.toLocaleLowerCase() === wordLowerCase,
       );
       const filteredProposals = proposals
-        .filter(
-          ({ replacementString, displayString }) =>
-            word === '*' ||
-            (displayString.toLocaleLowerCase() !== wordLowerCase && displayString.toLocaleLowerCase().startsWith(wordLowerCase)) ||
-            (replacementString.toLocaleLowerCase() !== wordLowerCase && replacementString.toLocaleLowerCase().startsWith(wordLowerCase)),
-        )
+        .filter(({ replacementString, displayString }) => {
+          if (word === '*') {
+            return true;
+          }
+
+          const display = sanitizeProposal(displayString);
+          const replacement = replacementString.toLocaleLowerCase();
+
+          const displayMatch = display !== wordLowerCase && (display.startsWith(wordLowerCase) || display.includes(wordLowerCase));
+          const replacementMatch = replacement !== wordLowerCase && (replacement.startsWith(wordLowerCase) || replacement.includes(wordLowerCase));
+
+          return displayMatch || replacementMatch;
+        })
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
       if (filteredProposals.length === 0 && !hasSameName && explicit) {
@@ -56,7 +63,9 @@ export function useSqlDialectAutocompletion(data: ISQLEditorData): [Compartment,
       return [
         ...filteredProposals.map<SqlCompletion>(proposal => ({
           label: proposal.displayString,
-          apply: proposal.replacementString,
+          apply: (view, completion, from, to) => {
+            view.dispatch(insertCompletionText(view.state, proposal.replacementString, proposal.replacementOffset, to));
+          },
           boost: proposal.score,
           icon: proposal.icon,
         })),
@@ -146,4 +155,8 @@ export function useSqlDialectAutocompletion(data: ISQLEditorData): [Compartment,
   });
 
   return useEditorAutocompletion(config);
+}
+
+function sanitizeProposal(value: string): string {
+  return value.replace(/^"|"$/g, '').toLocaleLowerCase();
 }

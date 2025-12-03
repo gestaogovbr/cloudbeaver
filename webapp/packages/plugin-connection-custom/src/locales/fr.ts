@@ -1,8 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
-export default [['plugin_connection_custom_action_custom_label', 'Nouvelle connexion']];
+export default [
+  ['plugin_connection_custom_action_custom_label', 'Nouvelle connexion'],
+  ['plugin_connection_custom_action_custom_tooltip', 'Créer une nouvelle connexion'],
+  ['plugin_connection_custom_settings_disabled_name', 'Désactiver les connexions personnalisées'],
+];

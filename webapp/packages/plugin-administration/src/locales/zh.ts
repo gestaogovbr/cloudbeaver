@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['administration_server_configuration_save_confirmation_title', '服务器设置更新'],
   ['administration_server_configuration_save_confirmation_message', '即将更改关键设置。您确定吗？'],
@@ -29,6 +22,26 @@ export default [
 
   ['administration_configuration_tools_save_tooltip', '保存配置'],
   ['administration_configuration_tools_cancel_tooltip', '重置更改'],
+
+  ['administration_configuration_wizard_configuration_secure_cookies', 'Force HTTPS mode'],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_description',
+    'Enable force HTTPS to secure server-client communication. Recommended for production. Ensure your HTTPS proxy is properly configured for correct app functionality',
+  ],
+  [
+    'administration_configuration_wizard_configuration_secure_cookies_warning',
+    "The data won't be encrypted if forced HTTPS mode is disabled. This makes it vulnerable",
+  ],
+  ['administration_configuration_wizard_configuration_secure_cookies_docs', 'Server proxy configuration documentation'],
+  ['administration_configuration_wizard_configuration_supported_hosts', 'Allowed Server URLs'],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_description',
+    'You can specify multiple server URLs separated by a new line. An empty value means that all URLs are allowed. Access from the IP-addresses is always allowed.',
+  ],
+  [
+    'administration_configuration_wizard_configuration_supported_hosts_warning',
+    'You cannot remove your current domain ({arg:host}). Open the server configuration from another allowed domain or IP-address to remove this domain.',
+  ],
 
   ['administration_configuration_wizard_configuration_server_info', '服务器信息'],
   ['administration_configuration_wizard_configuration_server_name', '服务器名称'],
@@ -72,4 +85,8 @@ export default [
 
   ['administration_disabled_drivers_title', '已禁用的驱动'],
   ['administration_disabled_drivers_search_placeholder', '搜索驱动...'],
+  [
+    'administration_disabled_drivers_enable_unsafe_driver_message',
+    'Enabling this database driver may allow access to files on the server where this application is running. This could potentially expose sensitive system files or other protected data.\n\nOnly proceed if you fully understand the implications and trust the database configuration. Unauthorized or improper use of this driver may lead to security risks.\n\nDo you want to enable the "{arg:driverName}" driver?',
+  ],
 ];

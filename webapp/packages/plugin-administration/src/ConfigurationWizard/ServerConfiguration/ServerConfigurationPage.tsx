@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -78,17 +78,17 @@ export const ServerConfigurationPage: AdministrationItemContentComponent = obser
     }
 
     if (changed) {
-      const result = await commonDialogService.open(ConfirmationDialog, {
+      const { status } = await commonDialogService.open(ConfirmationDialog, {
         title: 'administration_server_configuration_save_confirmation_title',
         message: 'administration_server_configuration_save_confirmation_message',
       });
 
-      if (result === DialogueStateResult.Rejected) {
+      if (status === DialogueStateResult.Rejected) {
         return;
       }
     }
 
-    const saved = await formState.save();
+    const saved = await serverConfigurationFormStateManager.save();
 
     if (!saved) {
       const error = getFirstException(part.exception);
@@ -136,7 +136,7 @@ export const ServerConfigurationPage: AdministrationItemContentComponent = obser
         {configurationWizard && (
           <Group form>
             <GroupItem>
-              <h3>{translate('administration_configuration_wizard_configuration_title')}</h3>
+              <h3 className="tw:text-xl tw:font-semibold">{translate('administration_configuration_wizard_configuration_title')}</h3>
             </GroupItem>
             <GroupItem>
               <p className={s(styles, { message: true })}>{translate('administration_configuration_wizard_configuration_message')}</p>
@@ -154,8 +154,8 @@ export const ServerConfigurationPage: AdministrationItemContentComponent = obser
               <Placeholder container={serverConfigurationService.pluginsContainer} configurationWizard={configurationWizard} state={part.state} />
             </Group>
             <Placeholder container={serverConfigurationService.configurationContainer} configurationWizard={configurationWizard} state={part.state} />
-            <ServerConfigurationSecurityForm serverConfig={part.state.serverConfig} />
-            <ServerConfigurationDriversForm serverConfig={part.state.serverConfig} />
+            <ServerConfigurationSecurityForm configurationWizard={configurationWizard} state={part.state} />
+            <ServerConfigurationDriversForm initialServerConfig={part.initialState.serverConfig} serverConfig={part.state.serverConfig} />
           </Container>
         </Form>
       </Container>

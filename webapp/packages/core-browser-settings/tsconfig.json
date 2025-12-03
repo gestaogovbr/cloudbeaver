@@ -1,48 +1,36 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@cloudbeaver/tsconfig/tsconfig.json",
   "exclude": [
     "**/node_modules",
-    "lib/**/*",
-    "dist/**/*"
+    "lib/**/*"
   ],
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/tsconfig.tsbuildinfo",
+    "composite": true
   },
   "references": [
     {
-      "path": "../core-browser/tsconfig.json"
+      "path": "../../common-react/@dbeaver/react-tests"
     },
     {
-      "path": "../core-client-activity/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/cli"
     },
     {
-      "path": "../core-di/tsconfig.json"
+      "path": "../core-cli"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../core-di"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../core-localization"
     },
     {
-      "path": "../core-root/tsconfig.json"
+      "path": "../core-settings"
     },
     {
-      "path": "../core-sdk/tsconfig.json"
-    },
-    {
-      "path": "../core-settings/tsconfig.json"
-    },
-    {
-      "path": "../core-settings/tsconfig.json"
-    },
-    {
-      "path": "../core-utils/tsconfig.json"
-    },
-    {
-      "path": "../tests-runner/tsconfig.json"
+      "path": "../core-utils"
     }
   ],
   "include": [

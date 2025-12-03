@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,8 @@ import { ConnectionExecutionContextService } from '@cloudbeaver/core-connections
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
 import type { ITask } from '@cloudbeaver/core-executor';
-import { AsyncTaskInfoService, GraphQLService, type SqlExecutionPlan } from '@cloudbeaver/core-sdk';
+import { AsyncTaskInfoService } from '@cloudbeaver/core-root';
+import { GraphQLService, type SqlExecutionPlan } from '@cloudbeaver/core-sdk';
 import { uuid } from '@cloudbeaver/core-utils';
 
 import type { ISqlEditorTabState } from '../../ISqlEditorTabState.js';
@@ -22,7 +23,7 @@ interface IExecutionPlanData {
   executionPlan: SqlExecutionPlan | null;
 }
 
-@injectable()
+@injectable(() => [GraphQLService, NotificationService, AsyncTaskInfoService, ConnectionExecutionContextService, SqlDataSourceService])
 export class SqlExecutionPlanService {
   data: Map<string, IExecutionPlanData>;
 

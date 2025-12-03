@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,12 +8,14 @@
 import { makeObservable, observable } from 'mobx';
 
 import type { MetadataMap, MetadataValueGetter, schema } from '@cloudbeaver/core-utils';
+import { SyncExecutor } from '@cloudbeaver/core-executor';
 
 import type { ITabInfo, ITabInfoOptions, ITabsContainer } from './ITabsContainer.js';
 
-export class TabsContainer<TProps = void, TOptions extends Record<string, any> = never> implements ITabsContainer<TProps, TOptions> {
+export class TabsContainer<TProps = void, TOptions extends Record<string, any> | unknown = unknown> implements ITabsContainer<TProps, TOptions> {
   readonly areaLabel: string;
   readonly tabInfoMap: Map<string, ITabInfo<TProps, TOptions>>;
+  readonly onTabSelect: SyncExecutor<string>;
 
   get tabInfoList(): Array<ITabInfo<TProps, TOptions>> {
     return Array.from(this.tabInfoMap.values()).sort((a, b) => a.order - b.order);
@@ -29,6 +31,7 @@ export class TabsContainer<TProps = void, TOptions extends Record<string, any> =
     this.tabInfoMap = new Map();
     this.currentTabId = null;
     this.areaLabel = areaLabel;
+    this.onTabSelect = new SyncExecutor();
 
     makeObservable<TabsContainer<TProps, TOptions>, 'currentTabId'>(this, {
       tabInfoMap: observable.shallow,
@@ -58,6 +61,7 @@ export class TabsContainer<TProps = void, TOptions extends Record<string, any> =
     });
 
     this.currentTabId = tabId;
+    this.onTabSelect.execute(tabId);
   }
 
   getTabInfo(tabId: string): ITabInfo<TProps, TOptions> | undefined {
@@ -69,11 +73,15 @@ export class TabsContainer<TProps = void, TOptions extends Record<string, any> =
     tabId: string,
     props: TProps,
     valueGetter?: MetadataValueGetter<string, T>,
-    schema?: schema.AnyZodObject,
+    schema?: schema.ZodObject,
   ): T {
     const tabInfo = this.getDisplayedTabInfo(tabId, props);
 
     return state.get(tabId, valueGetter || tabInfo?.stateGetter?.(props), schema);
+  }
+
+  setTabState<T>(state: MetadataMap<string, any>, tabId: string, value: T): T {
+    return state.set(tabId, value).get(tabId);
   }
 
   getDisplayed(props?: TProps): Array<ITabInfo<TProps, TOptions>> {

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,12 +11,12 @@ import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dial
 import { NotificationService } from '@cloudbeaver/core-events';
 import { executorHandlerFilter, ExecutorInterrupter, type IExecutionContextProvider } from '@cloudbeaver/core-executor';
 
-import { DatabaseEditAction } from './DatabaseDataModel/Actions/DatabaseEditAction.js';
 import type { IRequestEventData } from './DatabaseDataModel/IDatabaseDataModel.js';
 import { DatabaseDataSourceOperation } from './DatabaseDataModel/IDatabaseDataSource.js';
 import { TableViewerStorageService } from './TableViewer/TableViewerStorageService.js';
+import { IDatabaseDataEditAction } from './DatabaseDataModel/Actions/IDatabaseDataEditAction.js';
 
-@injectable()
+@injectable(() => [CommonDialogService, TableViewerStorageService, NotificationService])
 export class DataViewerDataChangeConfirmationService {
   constructor(
     private readonly commonDialogService: CommonDialogService,
@@ -47,26 +47,28 @@ export class DataViewerDataChangeConfirmationService {
 
       try {
         for (let resultIndex = 0; resultIndex < results.length; resultIndex++) {
-          const editor = model.source.getActionImplementation(resultIndex, DatabaseEditAction);
+          const editor = model.source.getAction(resultIndex, IDatabaseDataEditAction);
 
           if (editor?.isEdited() && !model.isDisabled(resultIndex)) {
             if (confirmationContext.confirmed) {
               await model.save();
             } else {
-              const result = await this.commonDialogService.open(ConfirmationDialog, {
+              const { status, result } = await this.commonDialogService.open(ConfirmationDialog, {
                 title: 'data_viewer_result_edited_title',
                 subTitle: model.name || undefined,
                 message: 'data_viewer_result_edited_message',
                 confirmActionText: 'ui_yes',
-                extraStatus: 'no',
+                showExtraAction: true,
               });
 
-              if (result === DialogueStateResult.Rejected) {
-                ExecutorInterrupter.interrupt(contexts);
-              } else if (result === DialogueStateResult.Resolved) {
+              if (status === DialogueStateResult.Resolved) {
                 await model.save();
               } else {
-                editor.clear();
+                if (result?.isExtraAction) {
+                  editor.clear();
+                } else {
+                  ExecutorInterrupter.interrupt(contexts);
+                }
               }
             }
           }

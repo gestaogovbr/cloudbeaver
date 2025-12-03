@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,9 @@ package io.cloudbeaver.server;
  * Various constants
  */
 public class CBConstants {
+    public static final int STATIC_CACHE_SECONDS = 60 * 60 * 24 * 3;
+
+    public static final String CONF_DIR_NAME = "conf";
     public static final String RUNTIME_DATA_DIR_NAME = ".data";
     public static final String RUNTIME_APP_CONFIG_FILE_NAME = ".cloudbeaver.runtime.conf";
     public static final String RUNTIME_PRODUCT_CONFIG_FILE_NAME = ".product.runtime.conf";
@@ -29,6 +32,9 @@ public class CBConstants {
     public static final String PARAM_SERVER_PORT = "serverPort";
     public static final String PARAM_SERVER_HOST = "serverHost";
     public static final String PARAM_SERVER_NAME = "serverName";
+    public static final String PARAM_FORCE_HTTPS = "forceHttps";
+    public static final String PARAM_BIND_SESSION_TO_IP = "bindSessionToIp";
+    public static final String PARAM_SUPPORTED_HOSTS = "supportedHosts";
     public static final String PARAM_SSL_CONFIGURATION_PATH = "sslConfigurationPath";
     public static final String PARAM_CONTENT_ROOT = "contentRoot";
     public static final String PARAM_SERVER_URL = "serverURL";
@@ -44,6 +50,7 @@ public class CBConstants {
     public static final String PARAM_STATIC_CONTENT = "staticContent";
     public static final String PARAM_RESOURCE_QUOTAS = "resourceQuotas";
     public static final String PARAM_RESOURCE_MANAGER_ENABLED = "resourceManagerEnabled";
+    public static final String PARAM_SECRET_MANAGER_ENABLED = "secretManagerEnabled";
     public static final String PARAM_SHOW_READ_ONLY_CONN_INFO = "showReadOnlyConnectionInfo";
     public static final String PARAM_CONN_GRANT_ANON_ACCESS = "grantConnectionsAccessToAnonymousTeam";
     public static final String PARAM_AUTH_PROVIDERS = "authConfiguration";
@@ -85,8 +92,11 @@ public class CBConstants {
 
     public static final String APPLICATION_JSON = "application/json";
 
-    public static final String QUOTA_PROP_FILE_LIMIT = "dataExportFileSizeLimit";
     public static final String ADMIN_AUTO_GRANT = "auto-grant";
     public static final String HOST_LOCALHOST = "localhost";
     public static final String HOST_127_0_0_1 = "127.0.0.1";
+
+    public static final String BIND_SESSION_ENABLE = "enable";
+    public static final String BIND_SESSION_DISABLE = "disable";
+    public static final String DEFAULT_CLOUD_PROJECT_NAME = "GlobalConfiguration";
 }

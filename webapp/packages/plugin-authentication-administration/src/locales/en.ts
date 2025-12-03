@@ -1,11 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
+  ['authentication_administration_pages_label', 'Pages'],
   ['authentication_administration_user_connections_user_add', 'User Creation'],
   ['authentication_administration_user_connections_user_new', 'New user'],
   ['authentication_administration_user_connections_access_load_fail', "User's granted connections loading failed"],
@@ -83,9 +77,9 @@ export default [
   ],
 
   ['administration_identity_providers_tab_title', 'Identity Providers'],
-  ['administration_identity_providers_provider', 'Provider'],
+  ['administration_identity_providers_provider', 'Provider Type'],
   ['administration_identity_providers_provider_id', 'ID'],
-  ['administration_identity_providers_provider_configuration_name', 'Configuration name'],
+  ['administration_identity_providers_provider_configuration_name', 'Configuration Name'],
   ['administration_identity_providers_provider_configuration_disabled', 'Disabled'],
   ['administration_identity_providers_provider_configuration_description', 'Description'],
   ['administration_identity_providers_provider_configuration_icon_url', 'Icon URL'],
@@ -110,7 +104,7 @@ export default [
   ['administration_teams_tab_description', 'Team management'],
   ['administration_teams_team_creation', 'Team Creation'],
   ['administration_teams_team_id', 'Team ID'],
-  ['administration_teams_team_name', 'Team name'],
+  ['administration_teams_team_name', 'Team Name'],
   ['administration_teams_team_description', 'Description'],
   ['administration_teams_team_permissions', 'Permissions'],
   ['administration_teams_team_create_error', 'Create team error'],
@@ -145,4 +139,13 @@ export default [
 
   ['plugin_authentication_administration_team_form_edit_label', 'Team editing form'],
   ['plugin_authentication_administration_user_form_edit_label', 'User editing form'],
+
+  [
+    'plugin_authentication_administration_user_username_validation_error',
+    "User's name may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
+  [
+    'plugin_authentication_administration_team_id_validation_error',
+    "Team's ID may not contain the following symbols / : \" \\ ' <> | ? * and can't start with a dot",
+  ],
 ];

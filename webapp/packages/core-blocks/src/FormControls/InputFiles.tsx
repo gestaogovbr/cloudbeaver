@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ type BaseProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 
     error?: boolean;
     loading?: boolean;
     description?: string;
+    buttonText?: string;
     labelTooltip?: string;
     hideTags?: boolean;
     ref?: React.Ref<HTMLInputElement>;
@@ -72,6 +73,7 @@ export const InputFiles: InputFilesType = observer(
       error,
       loading,
       description,
+      buttonText,
       labelTooltip,
       hideTags,
       autoHide,
@@ -167,15 +169,28 @@ export const InputFiles: InputFilesType = observer(
 
     const files = Array.from(value ?? []);
 
+    let text = buttonText;
+
+    if (!text) {
+      text = translate(rest.multiple ? 'ui_upload_files' : 'ui_upload_file');
+    }
+
     return (
-      <Field {...layoutProps} className={s(styles, { field: true }, className)}>
+      <Field {...layoutProps} className={className}>
         <FieldLabel title={labelTooltip || rest.title} required={required} className={s(styles, { fieldLabel: true })}>
           {children}
         </FieldLabel>
         <div className={s(styles, { inputContainer: true })}>
-          <UploadArea ref={ref} {...rest} name={name} value={value} required={required} onChange={handleChange}>
-            <Button icon="/icons/import.svg" tag="div" loading={loading} mod={['outlined']}>
-              {translate(rest.multiple ? 'ui_upload_files' : 'ui_upload_file')}
+          <UploadArea ref={ref} {...rest} name={name} value={value} required={required} reset onChange={handleChange}>
+            <Button
+              iconPlacement="start"
+              className="tw:inline-flex tw:justify-center"
+              icon="/icons/import.svg"
+              tag="div"
+              loading={loading}
+              variant="secondary"
+            >
+              {text}
             </Button>
           </UploadArea>
           {!hideTags && (

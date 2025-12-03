@@ -17,13 +17,15 @@
 package io.cloudbeaver.service.data.transfer.impl;
 
 import com.google.gson.stream.JsonWriter;
+import io.cloudbeaver.DBWConstants;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.WebConnectionInfo;
 import io.cloudbeaver.model.session.WebSession;
-import io.cloudbeaver.server.CBApplication;
+import io.cloudbeaver.server.BaseWebPlatform;
 import io.cloudbeaver.server.CBConstants;
-import io.cloudbeaver.server.CBPlatform;
+import io.cloudbeaver.server.WebAppUtils;
+import io.cloudbeaver.server.WebApplication;
 import io.cloudbeaver.service.WebServiceServletBase;
 import io.cloudbeaver.service.data.transfer.DBWServiceDataTransfer;
 import io.cloudbeaver.service.sql.WebSQLContextInfo;
@@ -37,6 +39,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
+import org.jkiss.dbeaver.runtime.DBWorkbench;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,7 +58,7 @@ public class WebDataTransferImportServlet extends WebServiceServletBase {
     DBWServiceDataTransfer dbwServiceDataTransfer;
 
 
-    public WebDataTransferImportServlet(CBApplication application, DBWServiceDataTransfer dbwServiceDataTransfer) {
+    public WebDataTransferImportServlet(WebApplication application, DBWServiceDataTransfer dbwServiceDataTransfer) {
         super(application);
         this.dbwServiceDataTransfer = dbwServiceDataTransfer;
     }
@@ -70,8 +73,17 @@ public class WebDataTransferImportServlet extends WebServiceServletBase {
             response.sendError(HttpServletResponse.SC_FORBIDDEN, "Import for users only");
             return;
         }
+        if (DBWorkbench.isDistributed() && !session.hasPermission(DBWConstants.PERMISSION_SQL_RESULT_UPDATE)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Permission denied");
+            return;
+        }
+        if (!session.hasGlobalPermission(DBWConstants.GLOBAL_PERMISSION_DATA_EDITOR_IMPORT)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Import is not allowed for this user");
+            return;
+        }
         if ("POST".equalsIgnoreCase(request.getMethod())) {
-            Path tempFolder = CBPlatform.getInstance().getTempFolder(session.getProgressMonitor(), CBPlatform.TEMP_FILE_IMPORT_FOLDER);
+            Path tempFolder = WebAppUtils.getWebPlatform().getTempFolder(session.getProgressMonitor(),
+                BaseWebPlatform.TEMP_FILE_IMPORT_FOLDER);
             MultipartConfigElement MULTI_PART_CONFIG = new MultipartConfigElement(tempFolder.toString());
 
             request.setAttribute(ECLIPSE_JETTY_MULTIPART_CONFIG, MULTI_PART_CONFIG);

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 package io.cloudbeaver.service.security;
 
 import io.cloudbeaver.auth.NoAuthCredentialsProvider;
-import io.cloudbeaver.model.app.WebAuthApplication;
+import io.cloudbeaver.model.app.ServletApplication;
+import io.cloudbeaver.model.app.ServletAuthApplication;
 import io.cloudbeaver.model.config.SMControllerConfiguration;
 import io.cloudbeaver.model.config.WebDatabaseConfig;
 import io.cloudbeaver.service.security.db.CBDatabase;
@@ -29,7 +30,7 @@ import org.jkiss.dbeaver.model.auth.SMCredentialsProvider;
 /**
  * Embedded Security Controller Factory
  */
-public class EmbeddedSecurityControllerFactory<T extends WebAuthApplication> {
+public class EmbeddedSecurityControllerFactory<T extends ServletAuthApplication> {
     private static volatile CBDatabase DB_INSTANCE;
 
     public static CBDatabase getDbInstance() {
@@ -45,7 +46,9 @@ public class EmbeddedSecurityControllerFactory<T extends WebAuthApplication> {
         SMCredentialsProvider credentialsProvider,
         SMControllerConfiguration smConfig
     ) throws DBException {
+        boolean initialization = false;
         if (DB_INSTANCE == null) {
+            initialization = true;
             synchronized (EmbeddedSecurityControllerFactory.class) {
                 if (DB_INSTANCE == null) {
                     DB_INSTANCE = createAndInitDatabaseInstance(
@@ -63,9 +66,13 @@ public class EmbeddedSecurityControllerFactory<T extends WebAuthApplication> {
                 )).schedule();
             }
         }
-        return createEmbeddedSecurityController(
+        var controller = createEmbeddedSecurityController(
             application, DB_INSTANCE, credentialsProvider, smConfig
         );
+        if (initialization) {
+            controller.initialize();
+        }
+        return controller;
     }
 
     protected @NotNull CBDatabase createAndInitDatabaseInstance(
@@ -73,7 +80,7 @@ public class EmbeddedSecurityControllerFactory<T extends WebAuthApplication> {
         @NotNull WebDatabaseConfig databaseConfig,
         @NotNull SMControllerConfiguration smConfig
     ) throws DBException {
-        var database = new CBDatabase(application, databaseConfig);
+        var database = makeDatabase(application, databaseConfig);
         var securityController = createEmbeddedSecurityController(
             application, database, new NoAuthCredentialsProvider(), smConfig
         );
@@ -96,5 +103,9 @@ public class EmbeddedSecurityControllerFactory<T extends WebAuthApplication> {
         SMControllerConfiguration smConfig
     ) {
         return new CBEmbeddedSecurityController<T>(application, database, credentialsProvider, smConfig);
+    }
+
+    protected CBDatabase makeDatabase(ServletApplication application, WebDatabaseConfig databaseConfig) {
+        return new CBDatabase(application, databaseConfig);
     }
 }

@@ -1,11 +1,11 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { RenameDialog } from '@cloudbeaver/core-blocks';
+import { importLazyComponent, RenameDialog } from '@cloudbeaver/core-blocks';
 import {
   type Connection,
   ConnectionInfoResource,
@@ -23,7 +23,7 @@ import { ExtensionUtils } from '@cloudbeaver/core-extensions';
 import { LocalizationService } from '@cloudbeaver/core-localization';
 import { DATA_CONTEXT_NAV_NODE, EObjectFeature, NodeManagerUtils } from '@cloudbeaver/core-navigation-tree';
 import { type ISessionAction, sessionActionContext, SessionActionService } from '@cloudbeaver/core-root';
-import { ACTION_RENAME, ActionService, menuExtractItems, MenuService, ViewService } from '@cloudbeaver/core-view';
+import { ACTION_OPEN, ACTION_RENAME, ActionService, menuExtractItems, MenuService, ViewService } from '@cloudbeaver/core-view';
 import { MENU_CONNECTIONS } from '@cloudbeaver/plugin-connections';
 import { NavigationTabsService } from '@cloudbeaver/plugin-navigation-tabs';
 import {
@@ -45,13 +45,29 @@ import { SQL_EDITOR_SOURCE_ACTION } from './SQL_EDITOR_SOURCE_ACTION.js';
 import { SqlEditorNavigatorService } from './SqlEditorNavigatorService.js';
 import { SqlEditorTabService } from './SqlEditorTabService.js';
 
+const WelcomeNewSqlEditor = importLazyComponent(() => import('./WelcomeNewSqlEditor.js').then(m => m.WelcomeNewSqlEditor));
+
 interface IActiveConnectionContext {
   connectionKey?: IConnectionInfoParams;
   catalogId?: string;
   schemaId?: string;
 }
 
-@injectable()
+@injectable(() => [
+  SqlEditorNavigatorService,
+  NavigationTabsService,
+  ViewService,
+  ActionService,
+  MenuService,
+  SessionActionService,
+  CommonDialogService,
+  SqlEditorTabService,
+  SqlDataSourceService,
+  ConnectionInfoResource,
+  SqlEditorService,
+  LocalizationService,
+  SqlEditorSettingsService,
+])
 export class SqlEditorBootstrap extends Bootstrap {
   constructor(
     private readonly sqlEditorNavigatorService: SqlEditorNavigatorService,
@@ -72,18 +88,14 @@ export class SqlEditorBootstrap extends Bootstrap {
   }
 
   override register(): void {
+    this.navigationTabsService.welcomeContainer.add(WelcomeNewSqlEditor, undefined, () => this.sqlEditorSettingsService.disabled);
     this.registerTopAppBarItem();
 
     this.menuService.addCreator({
       contexts: [DATA_CONTEXT_SQL_EDITOR_STATE, DATA_CONTEXT_SQL_EDITOR_TAB],
       getItems: (context, items) => [...items, ACTION_RENAME],
       orderItems: (context, items) => {
-        const actions = menuExtractItems(items, [ACTION_RENAME]);
-
-        if (actions.length > 0) {
-          items.unshift(...actions);
-        }
-
+        items.unshift(...menuExtractItems(items, [ACTION_RENAME]));
         return items;
       },
     });
@@ -101,6 +113,10 @@ export class SqlEditorBootstrap extends Bootstrap {
         return true;
       },
       getItems: (context, items) => [...items, ACTION_SQL_EDITOR_OPEN],
+      orderItems: (context, items) => {
+        items.unshift(...menuExtractItems(items, [ACTION_OPEN, ACTION_SQL_EDITOR_OPEN]));
+        return items;
+      },
     });
 
     this.actionService.addHandler({
@@ -143,7 +159,7 @@ export class SqlEditorBootstrap extends Bootstrap {
             const name = getSqlEditorName(state, dataSource, connection);
             const regexp = /^(.*?)(\.\w+)$/gi.exec(name);
 
-            const result = await this.commonDialogService.open(RenameDialog, {
+            const { status, result } = await this.commonDialogService.open(RenameDialog, {
               name: regexp?.[1] ?? name,
               objectName: name,
               icon: dataSource.icon,
@@ -153,17 +169,17 @@ export class SqlEditorBootstrap extends Bootstrap {
                 ) && dataSource.canRename(name),
             });
 
-            if (result !== DialogueStateResult.Rejected && result !== DialogueStateResult.Resolved) {
+            if (status === DialogueStateResult.Resolved && result !== undefined) {
               dataSource.setName((result ?? '').trim());
             }
             break;
           }
           case ACTION_SQL_EDITOR_OPEN: {
-            const connection = context.get(DATA_CONTEXT_CONNECTION)!;
+            const connectionKey = context.get(DATA_CONTEXT_CONNECTION)!;
 
             this.sqlEditorNavigatorService.openNewEditor({
               dataSourceKey: LocalStorageSqlDataSource.key,
-              connectionKey: createConnectionParam(connection),
+              connectionKey,
             });
             break;
           }
@@ -185,10 +201,9 @@ export class SqlEditorBootstrap extends Bootstrap {
       menus: [MENU_APP_ACTIONS],
       getItems: (context, items) => [...items, ACTION_SQL_EDITOR_NEW],
       orderItems: (context, items) => {
-        let placeIndex = items.indexOf(ACTION_SQL_EDITOR_NEW);
-
         const actionsOpen = menuExtractItems(items, [ACTION_SQL_EDITOR_NEW]);
 
+        let placeIndex = items.indexOf(ACTION_SQL_EDITOR_NEW);
         const connectionsIndex = items.indexOf(MENU_CONNECTIONS);
 
         if (connectionsIndex !== -1) {
@@ -237,10 +252,10 @@ export class SqlEditorBootstrap extends Bootstrap {
 
         return false;
       },
-      handler: (context, action) => {
+      handler: async (context, action) => {
         switch (action) {
           case ACTION_SQL_EDITOR_NEW: {
-            this.openSQLEditor();
+            await this.openSQLEditor();
             break;
           }
         }
@@ -277,10 +292,10 @@ export class SqlEditorBootstrap extends Bootstrap {
     };
   }
 
-  private openSQLEditor() {
+  async openSQLEditor(): Promise<void> {
     const connectionContext = this.getActiveConnectionContext();
 
-    this.sqlEditorNavigatorService.openNewEditor({
+    await this.sqlEditorNavigatorService.openNewEditor({
       dataSourceKey: LocalStorageSqlDataSource.key,
       connectionKey: connectionContext.connectionKey,
       catalogId: connectionContext.catalogId,

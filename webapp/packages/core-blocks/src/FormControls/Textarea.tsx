@@ -1,12 +1,12 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
-import { useCallback, useContext, useLayoutEffect, useRef } from 'react';
+import { useCallback, useContext, useId, useLayoutEffect, useRef } from 'react';
 
 import { getTextFileReadingProcess } from '@cloudbeaver/core-utils';
 
@@ -23,10 +23,12 @@ import { FieldDescription } from './FieldDescription.js';
 import { FieldLabel } from './FieldLabel.js';
 import { FormContext } from './FormContext.js';
 import textareaStyle from './Textarea.module.css';
+import { useMergeRefs } from '../useMergeRefs.js';
 
 type BaseProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'style'> &
   ILayoutSizeProps & {
-    description?: string;
+    ref?: React.Ref<HTMLTextAreaElement | null>;
+    description?: React.ReactNode;
     labelTooltip?: string;
     embedded?: boolean;
     cursorInitiallyAtEnd?: boolean;
@@ -48,11 +50,12 @@ type ObjectProps<TKey extends keyof TState, TState> = BaseProps & {
 };
 
 interface TextareaType {
-  (props: ControlledProps): JSX.Element;
-  <TKey extends keyof TState, TState>(props: ObjectProps<TKey, TState>): JSX.Element;
+  (props: ControlledProps): React.JSX.Element;
+  <TKey extends keyof TState, TState>(props: ObjectProps<TKey, TState>): React.JSX.Element;
 }
 
 export const Textarea: TextareaType = observer(function Textarea({
+  ref,
   name,
   value: controlledValue,
   state,
@@ -69,7 +72,9 @@ export const Textarea: TextareaType = observer(function Textarea({
   ...rest
 }: ControlledProps | ObjectProps<any, any>) {
   const translate = useTranslate();
+  const inputId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mergedRef = useMergeRefs(...[textareaRef, ref!].filter(Boolean));
   const layoutProps = getLayoutProps(rest);
   rest = filterLayoutFakeProps(rest);
   const styles = useS(textareaStyle);
@@ -102,12 +107,13 @@ export const Textarea: TextareaType = observer(function Textarea({
 
   return (
     <Field {...layoutProps} className={s(styles, { field: true, embedded }, className)}>
-      <FieldLabel className={s(styles, { fieldLabel: true })} title={labelTooltip || rest.title} required={required}>
+      <FieldLabel htmlFor={inputId} className={s(styles, { fieldLabel: true })} title={labelTooltip || rest.title} required={required}>
         {children}
       </FieldLabel>
       <textarea
         {...rest}
-        ref={textareaRef}
+        ref={mergedRef}
+        id={inputId}
         required={required}
         className={s(styles, { textarea: true })}
         value={value ?? ''}
@@ -137,7 +143,7 @@ export const Textarea: TextareaType = observer(function Textarea({
             }
           }}
         >
-          <Button tag="div" disabled={rest.disabled || rest.readOnly} mod={['outlined']}>
+          <Button className="tw:inline-flex" tag="div" disabled={rest.disabled || rest.readOnly} variant="secondary">
             {translate('ui_file')}
           </Button>
         </UploadArea>

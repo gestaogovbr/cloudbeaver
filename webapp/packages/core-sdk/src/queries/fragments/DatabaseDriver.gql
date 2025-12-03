@@ -22,6 +22,10 @@ fragment DatabaseDriver on DriverInfo {
   applicableAuthModels
   applicableNetworkHandlers
   configurationTypes
+  driverId
+  driverInstalled
+  downloadable
+  safeEmbeddedDriver
 
   mainProperties @include(if: $includeMainProperties) {
     ...DriverPropertyInfo

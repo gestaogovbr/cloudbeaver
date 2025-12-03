@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,8 @@ import {
 } from '@cloudbeaver/core-resource';
 import { SessionDataResource } from '@cloudbeaver/core-root';
 import { DetailsError, type NavNodeChildrenQuery as fake, GraphQLService } from '@cloudbeaver/core-sdk';
-import { flat, getPathName, getPathParent, isDefined, isUndefined, MetadataMap } from '@cloudbeaver/core-utils';
+import { flat, getPathName, getPathParent, isUndefined, MetadataMap } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 
 import { NavTreeSettingsService } from '../NavTreeSettingsService.js';
 import type { NavNode } from './EntityTypes.js';
@@ -58,7 +59,15 @@ export interface INavNodeRenameData {
   newNodeId: string;
 }
 
-@injectable()
+@injectable(() => [
+  GraphQLService,
+  NavNodeInfoResource,
+  NavTreeSettingsService,
+  SessionDataResource,
+  UserInfoResource,
+  ProjectInfoResource,
+  AppAuthService,
+])
 export class NavTreeResource extends CachedMapResource<string, string[], Record<string, unknown>, INodeMetadata> {
   readonly beforeNodeDelete: IExecutor<ResourceKeySimple<string>>;
   readonly onNodeRefresh: IExecutor<string>;
@@ -142,7 +151,7 @@ export class NavTreeResource extends CachedMapResource<string, string[], Record<
       parent = next;
     }
 
-    if (nextNode && !children.includes(nextNode)) {
+    if (nextNode !== undefined && !children.includes(nextNode)) {
       return false;
     }
 
@@ -150,6 +159,19 @@ export class NavTreeResource extends CachedMapResource<string, string[], Record<
   }
 
   async refreshTree(navNodeId: string, silent = false): Promise<void> {
+    this.performUpdate(navNodeId, [], async () => {
+      await this.graphQLService.sdk.navRefreshNode({
+        nodePath: navNodeId,
+      });
+
+      if (!silent) {
+        this.markTreeOutdated(navNodeId);
+      }
+      await this.onNodeRefresh.execute(navNodeId);
+    });
+  }
+
+  async refreshNode(navNodeId: string, silent = false): Promise<void> {
     this.performUpdate(navNodeId, [], async () => {
       await this.graphQLService.sdk.navRefreshNode({
         nodePath: navNodeId,
@@ -257,7 +279,7 @@ export class NavTreeResource extends CachedMapResource<string, string[], Record<
       include,
     });
 
-    this.refreshTree(nodePath);
+    this.refreshNode(nodePath);
   }
 
   async changeName(node: NavNode, name: string): Promise<string> {
@@ -442,21 +464,26 @@ export class NavTreeResource extends CachedMapResource<string, string[], Record<
     this.navNodeInfoResource.delete(items.exclude(key));
   }
 
+  async preloadParents(nodeId: string): Promise<boolean> {
+    if (!this.navNodeInfoResource.has(nodeId) && nodeId !== ROOT_NODE_PATH) {
+      await this.navNodeInfoResource.loadNodeParents(nodeId);
+    }
+    const parents = this.navNodeInfoResource.getParents(nodeId);
+    return await this.preloadNodeParents(parents, nodeId);
+  }
+
   protected override async preLoadData(key: ResourceKey<string>, contexts: IExecutionContext<ResourceKey<string>>): Promise<void> {
     await ResourceKeyUtils.forEachAsync(key, async nodeId => {
       if (isResourceAlias(nodeId)) {
         return;
       }
 
-      if (!this.navNodeInfoResource.has(nodeId) && nodeId !== ROOT_NODE_PATH) {
-        await this.navNodeInfoResource.loadNodeParents(nodeId);
-      }
+      const preloaded = await this.preloadParents(nodeId);
       const parents = this.navNodeInfoResource.getParents(nodeId);
-      const preloaded = await this.preloadNodeParents(parents, nodeId);
 
       if (!preloaded) {
         const cause = new DetailsError(`Entity not found:\n"${nodeId}"\nPath:\n${parents.map(parent => `"${parent}"`).join('\n')}`);
-        const error = new ResourceError(this, key, undefined, 'Entity not found', { cause });
+        const error = new ResourceError(this, key, 'Entity not found', { cause });
         ExecutorInterrupter.interrupt(contexts);
         throw this.markError(error, key);
       }

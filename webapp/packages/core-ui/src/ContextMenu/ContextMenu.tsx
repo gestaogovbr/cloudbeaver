@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import { MenuItemRenderer } from './MenuItemRenderer.js';
 // TODO the click doesn't work for React components as children
 export const ContextMenu = observer<IContextMenuProps, HTMLButtonElement>(
   forwardRef(function ContextMenu(
-    { mouseContextMenu, menu: menuData, disclosure, children, placement, visible, onVisibleSwitch, modal, rtl, ...props },
+    { contextMenuPosition, menu: menuData, disclosure, children, placement, visible, onVisibleSwitch, modal, rtl, ...props },
     ref,
   ) {
     const translate = useTranslate();
@@ -29,7 +29,7 @@ export const ContextMenu = observer<IContextMenuProps, HTMLButtonElement>(
     const disabled = getComputed(() => loading || handler?.isDisabled?.(menuData.context) || false);
     const lazy = getComputed(() => !menuData.available || hidden);
 
-    const menu = useRef<IMenuState>();
+    const menu = useRef<IMenuState>(null);
 
     useAutoLoad({ name: `${ContextMenu.name}(${menuData.menu.id})` }, menuData.loaders, !lazy, menuVisible, true);
 
@@ -64,8 +64,8 @@ export const ContextMenu = observer<IContextMenuProps, HTMLButtonElement>(
       <Menu
         {...props}
         ref={ref}
-        label={translate(menuData.menu.label)}
-        title={translate(menuData.menu.tooltip)}
+        label={translate(menuData.menu.info.label)}
+        title={translate(menuData.menu.info.tooltip)}
         items={() =>
           menuData.items.map(
             item =>
@@ -78,7 +78,7 @@ export const ContextMenu = observer<IContextMenuProps, HTMLButtonElement>(
         menuRef={menu}
         modal={modal}
         visible={visible}
-        mouseContextMenu={mouseContextMenu}
+        contextMenuPosition={contextMenuPosition}
         placement={placement}
         disabled={disabled}
         disclosure={disclosure}

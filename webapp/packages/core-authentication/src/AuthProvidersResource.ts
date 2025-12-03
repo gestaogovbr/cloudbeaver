@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,15 @@ import {
 } from '@cloudbeaver/core-resource';
 import { ServerConfigResource } from '@cloudbeaver/core-root';
 import { type AuthProviderConfigurationInfoFragment, type AuthProviderInfoFragment, GraphQLService } from '@cloudbeaver/core-sdk';
-import { isNotNullDefined } from '@cloudbeaver/core-utils';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
 
+import { AUTH_PROVIDER_LOCAL_ID } from './AUTH_PROVIDER_LOCAL_ID.js';
 import { AuthConfigurationsResource } from './AuthConfigurationsResource.js';
 
 export type AuthProvider = NonNullable<AuthProviderInfoFragment>;
 export type AuthProviderConfiguration = NonNullable<AuthProviderConfigurationInfoFragment>;
 
-@injectable()
+@injectable(() => [GraphQLService, ServerConfigResource, AuthConfigurationsResource])
 export class AuthProvidersResource extends CachedMapResource<string, AuthProvider> {
   get configurable(): AuthProvider[] {
     return this.values.filter(provider => provider.configurable);
@@ -131,4 +132,16 @@ export class AuthProvidersResource extends CachedMapResource<string, AuthProvide
   protected validateKey(key: string): boolean {
     return typeof key === 'string';
   }
+}
+
+export function sortProvider(a: AuthProvider, b: AuthProvider): number {
+  if (a.id === AUTH_PROVIDER_LOCAL_ID) {
+    return 1;
+  }
+
+  if (b.id === AUTH_PROVIDER_LOCAL_ID) {
+    return -1;
+  }
+
+  return a.label.localeCompare(b.label);
 }

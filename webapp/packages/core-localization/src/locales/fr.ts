@@ -1,20 +1,15 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['name', 'fr'],
   ['ui_rename_taken_or_invalid', 'Ce nom est indisponible ou invalide'],
   ['ui_tag_new', 'Nouveau'],
   ['ui_light_theme', 'Clair'],
   ['ui_dark_theme', 'Sombre'],
+  ['ui_system_theme', 'Appareil'],
   ['ui_stepper_back', 'Retour'],
   ['ui_stepper_next', 'Suivant'],
   ['ui_stepper_finish', 'Terminer'],
   ['ui_load_more', 'Charger plus'],
+  ['ui_processing_skip_confirmations', 'Ne me demandez plus'],
   ['ui_processing_connecting', 'Connexion en cours...'],
   ['ui_processing_loading', 'Chargement...'],
   ['ui_processing_cancel', 'Annuler'],
@@ -38,6 +33,7 @@ export default [
   ['ui_custom', 'Personnalisé'],
   ['ui_configure', 'Configurer'],
   ['ui_apply', 'Appliquer'],
+  ['ui_replace', 'Remplacer'],
   ['ui_cancel', 'Annuler'],
   ['ui_reject', 'Reject'],
   ['ui_ignore', 'Ignorer'],
@@ -52,6 +48,8 @@ export default [
   ['ui_errors_details', 'Détails'],
   ['ui_search', 'Rechercher...'],
   ['ui_delete', 'Supprimer'],
+  ['ui_enable', 'Enable'],
+  ['ui_security_warning', 'Security Warning'],
   ['ui_deleting', 'Deleting...'],
   ['ui_add', 'Ajouter'],
   ['ui_refresh', 'Actualiser'],
@@ -71,6 +69,7 @@ export default [
   ['ui_page_not_found', 'Page non trouvée'],
   ['ui_revoke', 'Révoquer'],
   ['ui_grant', 'Accorder'],
+  ['ui_granted', 'Granted'],
   ['ui_edit', 'Modifier'],
   ['ui_open_in_tab', 'Ouvrir dans un onglet'],
   ['ui_rename', 'Renommer'],
@@ -78,6 +77,7 @@ export default [
   ['ui_create_processing', 'Création...'],
   ['ui_folder', 'Dossier'],
   ['ui_folder_new', 'Nouveau dossier'],
+  ['ui_folder_new_default_name', 'Nouveau dossier'],
   ['ui_rename_processing', 'Renommage...'],
   ['ui_interval', 'Intervalle'],
   ['ui_name', 'Nom'],
@@ -108,8 +108,9 @@ export default [
   ['ui_close_others', 'Fermer les autres'],
   ['ui_close_all_to_the_right', 'Fermer tout à droite'],
   ['ui_close_all_to_the_left', 'Fermer tout à gauche'],
-  ['ui_or', 'Ou'],
+  ['ui_or', 'ou'],
   ['ui_download', 'Télécharger'],
+  ['ui_redownload', 'Redownload'],
   ['ui_download_file', 'Télécharger le fichier'],
   ['ui_upload', 'Importer'],
   ['ui_import', 'Importer'],
@@ -132,6 +133,14 @@ export default [
   ['ui_you', 'Vous'],
   ['ui_ms', 'ms'],
   ['ui_not_found', 'Not found'],
+  ['ui_connection', 'Connection'],
+  ['ui_catalog', 'Catalog'],
+  ['ui_schema', 'Schema'],
+  ['ui_project', 'Project'],
+  ['ui_type', 'Type'],
+  ['ui_field_is_required', 'Please fill in this field'],
+  ['ui_delete_confirmation_message', 'You are about to delete "{arg:item}". Are you sure?'],
+  ['ui_not_selected', 'Not selected'],
 
   ['root_permission_denied', "Vous n'avez pas les permissions"],
   ['root_permission_no_permission', "Vous n'avez pas la permission pour cette action"],

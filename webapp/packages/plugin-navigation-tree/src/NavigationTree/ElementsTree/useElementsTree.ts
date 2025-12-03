@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,14 @@ import {
   useResource,
   useUserData,
 } from '@cloudbeaver/core-blocks';
-import { ConnectionInfoActiveProjectKey, ConnectionInfoResource } from '@cloudbeaver/core-connections';
 import { useService } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { ExecutorInterrupter, type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
-import { type NavNode, NavNodeInfoResource, NavTreeResource, ROOT_NODE_PATH } from '@cloudbeaver/core-navigation-tree';
-import { ProjectInfoResource, ProjectsService } from '@cloudbeaver/core-projects';
-import {
-  CachedMapAllKey,
-  CachedResourceOffsetPageKey,
-  CachedResourceOffsetPageTargetKey,
-  getNextPageOffset,
-  ResourceKeyUtils,
-} from '@cloudbeaver/core-resource';
+import { type NavNode, NavNodeInfoResource, NavTreeResource } from '@cloudbeaver/core-navigation-tree';
+import { ProjectsService } from '@cloudbeaver/core-projects';
+import { CachedResourceOffsetPageKey, CachedResourceOffsetPageTargetKey, getNextPageOffset, ResourceKeyUtils } from '@cloudbeaver/core-resource';
 import type { IDNDData } from '@cloudbeaver/core-ui';
-import { type ILoadableState, MetadataMap, throttle } from '@cloudbeaver/core-utils';
+import { type ILoadableState, MetadataMap, debounce } from '@cloudbeaver/core-utils';
 
 import { ElementsTreeService } from './ElementsTreeService.js';
 import type { IElementsTreeAction } from './IElementsTreeAction.js';
@@ -77,6 +70,7 @@ export interface IElementsTreeSettings {
   showFolderExplorerPath: boolean;
   configurable: boolean;
   projects: boolean;
+  objectsDescription: boolean;
 }
 
 export interface IElementsTreeOptions {
@@ -146,11 +140,9 @@ export interface IElementsTree extends ILoadableState {
 
 export function useElementsTree(options: IOptions): IElementsTree {
   const projectsService = useService(ProjectsService);
-  const projectInfoResource = useService(ProjectInfoResource);
   const notificationService = useService(NotificationService);
   const navNodeInfoResource = useService(NavNodeInfoResource);
   const navTreeResource = useService(NavTreeResource);
-  const connectionInfoResource = useService(ConnectionInfoResource);
   const elementsTreeService = useService(ElementsTreeService);
 
   const [localTreeNodesState] = useState(
@@ -188,8 +180,6 @@ export function useElementsTree(options: IOptions): IElementsTree {
   const functionsRef = useObjectRef({
     async loadTree(...nodes: string[]) {
       await Promise.all(loadingNodes.values());
-      await projectInfoResource.load();
-      await connectionInfoResource.load(ConnectionInfoActiveProjectKey);
       const preloadedRoot = await elementsTree.loadPath(options.folderExplorer.state.fullPath);
 
       if (preloadedRoot !== options.folderExplorer.state.folder) {
@@ -217,11 +207,6 @@ export function useElementsTree(options: IOptions): IElementsTree {
     },
 
     async loadNode(nodeId: string) {
-      await projectInfoResource.waitLoad();
-      await connectionInfoResource.waitLoad();
-      await navTreeResource.waitLoad();
-      await navNodeInfoResource.waitLoad();
-
       const expanded = elementsTree.isNodeExpanded(nodeId, true);
       if (!expanded && nodeId !== options.root) {
         if (navNodeInfoResource.isOutdated(nodeId)) {
@@ -436,6 +421,9 @@ export function useElementsTree(options: IOptions): IElementsTree {
       isLoaded(): boolean {
         return navNodeInfoResource.isLoaded(this.root);
       },
+      isOutdated(): boolean {
+        return navNodeInfoResource.isOutdated(this.root);
+      },
       getNodeState(nodeId: string) {
         return this.state.get(nodeId);
       },
@@ -544,7 +532,7 @@ export function useElementsTree(options: IOptions): IElementsTree {
 
         await options.onFilter?.(value);
       },
-      async collapse(nodeId?: string) {
+      collapse(nodeId?: string) {
         if (nodeId !== undefined) {
           if (!this.isNodeExpandable(nodeId)) {
             return;
@@ -564,12 +552,16 @@ export function useElementsTree(options: IOptions): IElementsTree {
       },
       async refresh(nodeId: string): Promise<void> {
         try {
-          await navTreeResource.refreshTree(nodeId);
+          await navTreeResource.refreshNode(nodeId);
         } catch (exception: any) {
           notificationService.logException(exception, 'app_navigationTree_refresh_error');
         }
       },
       async show(nodeId: string, path: string[]): Promise<void> {
+        if (!path.includes(this.baseRoot)) {
+          return;
+        }
+
         const preloaded = await this.loadPath(path, nodeId);
 
         if (preloaded !== nodeId) {
@@ -742,21 +734,13 @@ export function useElementsTree(options: IOptions): IElementsTree {
   }, [options.root]);
 
   const loadTreeThreshold = useCallback(
-    throttle(function refreshRoot() {
+    debounce(function refreshRoot() {
       functionsRef.loadTree(options.root).catch(() => ({}));
-    }, 100),
+    }, 500),
     [],
   );
 
-  useResource(useElementsTree, navTreeResource, options.baseRoot, {
-    onData: () => loadTreeThreshold(),
-  });
-
-  useResource(useElementsTree, ProjectInfoResource, CachedMapAllKey, {
-    onData: () => {
-      loadTreeThreshold();
-    },
-  });
+  useResource(useElementsTree, navTreeResource, options.baseRoot);
 
   useExecutor({
     executor: navNodeInfoResource.onDataOutdated,
@@ -789,11 +773,6 @@ export function useElementsTree(options: IOptions): IElementsTree {
         });
       },
     ],
-  });
-
-  useExecutor({
-    executor: projectInfoResource.onDataOutdated,
-    handlers: [() => navTreeResource.markOutdated(ROOT_NODE_PATH)],
   });
 
   useExecutor({

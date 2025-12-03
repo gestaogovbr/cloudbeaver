@@ -1,10 +1,11 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
+
 export * from './Promises/CancellablePromise.js';
 export * from './Promises/cancellableTimeout.js';
 export * from './Promises/Deferred.js';
@@ -21,11 +22,9 @@ export * from './blobToBase64.js';
 export * from './base64ToHex.js';
 export * from './bytesToSize.js';
 export * from './cacheValue.js';
-export * from './clsx.js';
 export * from './combineITerableIterators.js';
 export * from './copyToClipboard.js';
 export * from './declensionOfNumber.js';
-export * from './isNotNullDefined.js';
 export * from './flat.js';
 export * from './getMIME.js';
 export * from './getOS.js';
@@ -33,6 +32,7 @@ export * from './getPathName.js';
 export * from './getPathParent.js';
 export * from './getPathParents.js';
 export * from './getPathParts.js';
+export * from './isIp.js';
 export * from './GlobalConstants.js';
 export * from './ILoadableState.js';
 export * from './errorOf.js';
@@ -67,7 +67,6 @@ export * from './downloadFromURL.js';
 export * from './getTextFileReadingProcess.js';
 export * from './getTextBetween.js';
 export * from './timestampToDate.js';
-export * from './isDefined.js';
 export * from './createPath.js';
 export * from './debounce.js';
 export * from './schema.js';
@@ -89,3 +88,5 @@ export * from './types/UndefinedToNull.js';
 export * from './bindFunctions.js';
 export * from './getDomainFromUrl.js';
 export * from './isNumber.js';
+export * from './getSubjectDifferences.js';
+export * from './downloadImage.js';

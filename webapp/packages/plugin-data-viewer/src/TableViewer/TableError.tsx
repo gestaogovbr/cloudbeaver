@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,11 +9,13 @@ import { observable } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { useEffect } from 'react';
 
-import { Button, IconOrImage, s, useErrorDetails, useObservableRef, useS, useStateDelay, useTranslate } from '@cloudbeaver/core-blocks';
+import { Button, IconOrImage, Placeholder, s, useErrorDetails, useObservableRef, useS, useStateDelay, useTranslate } from '@cloudbeaver/core-blocks';
 import { ServerErrorType, ServerInternalError } from '@cloudbeaver/core-sdk';
 import { errorOf } from '@cloudbeaver/core-utils';
+import { useService } from '@cloudbeaver/core-di';
 
 import type { IDatabaseDataModel } from '../DatabaseDataModel/IDatabaseDataModel.js';
+import { DataViewerService } from '../DataViewerService.js';
 import styles from './TableError.module.css';
 
 interface Props {
@@ -32,6 +34,8 @@ interface ErrorInfo {
 export const TableError = observer<Props>(function TableError({ model, loading, className }) {
   const translate = useTranslate();
   const style = useS(styles);
+  const dataViewerService = useService(DataViewerService);
+
   const errorInfo = useObservableRef<ErrorInfo>(
     () => ({
       error: null,
@@ -85,8 +89,9 @@ export const TableError = observer<Props>(function TableError({ model, loading, 
   return (
     <div
       role="status"
+      aria-hidden={!error.error}
       aria-label={error.message}
-      tabIndex={0}
+      tabIndex={error.error ? 0 : -1}
       className={s(style, { error: true, animated, collapsed: !errorInfo.display, errorHidden }, className)}
     >
       <div className={s(style, { errorBody: true })}>
@@ -94,15 +99,17 @@ export const TableError = observer<Props>(function TableError({ model, loading, 
         <div className={s(style, { errorMessage: true })}>{error.message}</div>
       </div>
       <div className={s(style, { controls: true })}>
-        <Button className={s(style, { button: true })} type="button" mod={['outlined']} onClick={() => errorInfo.hide()}>
+        <Placeholder container={dataViewerService.errorActionsContainer} model={model} />
+
+        <Button className={s(style, { button: true })} type="button" variant="secondary" onClick={() => errorInfo.hide()}>
           {translate('ui_error_close')}
         </Button>
         {error.hasDetails && (
-          <Button className={s(style, { button: true })} type="button" mod={['outlined']} onClick={error.open}>
+          <Button className={s(style, { button: true })} type="button" variant="secondary" onClick={error.open}>
             {translate('ui_errors_details')}
           </Button>
         )}
-        <Button className={s(style, { button: true })} type="button" mod={['unelevated']} onClick={onRetry}>
+        <Button className={s(style, { button: true })} type="button" onClick={onRetry}>
           {translate('ui_processing_retry')}
         </Button>
       </div>

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@ import { EAdminPermission, PermissionsService, ServerConfigResource, SessionPerm
 import { type RouterState, ScreenService } from '@cloudbeaver/core-routing';
 import { StorageService } from '@cloudbeaver/core-storage';
 import { type DefaultValueGetter, GlobalConstants, MetadataMap, schema } from '@cloudbeaver/core-utils';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
 
 import { AdministrationItemService } from '../AdministrationItem/AdministrationItemService.js';
 import type { IAdministrationItemRoute } from '../AdministrationItem/IAdministrationItemRoute.js';
@@ -22,7 +23,15 @@ import { ADMINISTRATION_SCREEN_STATE_SCHEMA, type IAdministrationScreenInfo } fr
 
 const ADMINISTRATION_INFO = 'administration_info';
 
-@injectable()
+@injectable(() => [
+  SessionPermissionsResource,
+  PermissionsService,
+  ScreenService,
+  AdministrationItemService,
+  StorageService,
+  ServerConfigResource,
+  NotificationService,
+])
 export class AdministrationScreenService {
   static screenName = 'administration';
   static itemRouteName = 'administration.item';
@@ -119,11 +128,38 @@ export class AdministrationScreenService {
     // this is need for this.isConfigurationMode
     await this.serverConfigResource.load();
 
+    const uniqueItems = this.administrationItemService.getUniqueItems(this.isConfigurationMode);
+    const item = uniqueItems.find(i => i.name === this.activeScreen?.item);
+
     if (!this.isAdministrationPageActive) {
       return;
     }
 
-    if (!this.activeScreen || !this.administrationItemService.getItem(this.activeScreen.item, this.isConfigurationMode)) {
+    if (!this.activeScreen || !item) {
+      this.navigateToRoot();
+      return;
+    }
+
+    const loaders = [item]
+      .map(loader => loader?.getLoader?.())
+      .filter(isNotNullDefined)
+      .flat();
+
+    for (const loader of loaders) {
+      if (loader.isError()) {
+        continue;
+      }
+
+      if (!loader.isLoaded() || loader.isOutdated?.() === true) {
+        try {
+          await loader.load();
+        } catch {}
+      }
+    }
+
+    const loadedItem = this.administrationItemService.getItem(this.activeScreen.item, this.isConfigurationMode);
+
+    if (!loadedItem) {
       this.navigateToRoot();
     }
   }
@@ -190,8 +226,8 @@ export class AdministrationScreenService {
   }
 
   getItemState<T>(name: string): T | undefined;
-  getItemState<T>(name: string, defaultState: DefaultValueGetter<string, T>, schema?: schema.AnyZodObject): T;
-  getItemState<T>(name: string, defaultState?: DefaultValueGetter<string, T>, schema?: schema.AnyZodObject): T | undefined {
+  getItemState<T>(name: string, defaultState: DefaultValueGetter<string, T>, schema?: schema.ZodObject): T;
+  getItemState<T>(name: string, defaultState?: DefaultValueGetter<string, T>, schema?: schema.ZodObject): T | undefined {
     if (!this.serverConfigResource.isLoaded()) {
       throw new Error('Administration screen getItemState can be used only after server configuration loaded');
     }

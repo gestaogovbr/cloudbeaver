@@ -1,19 +1,18 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./react-leaflet.d.ts" />
-import type geojson from 'geojson';
 import leaflet from 'leaflet';
 import { useCallback, useEffect, useState } from 'react';
 import { GeoJSON, LayersControl, MapContainer, TileLayer, type TileLayerProps } from 'react-leaflet';
 
 import { s, useS, useSplit, useTranslate } from '@cloudbeaver/core-blocks';
-import type { IResultSetElementKey, IResultSetValue } from '@cloudbeaver/plugin-data-viewer';
+import type { IGridDataKey, IResultSetValue } from '@cloudbeaver/plugin-data-viewer';
 
 import styles from './LeafletMap.module.css';
 import './styles/base.scss';
@@ -25,12 +24,12 @@ export interface IAssociatedValue {
 
 interface IFeatureProperties {
   srid: number;
-  associatedCell: IResultSetElementKey;
+  associatedCell: IGridDataKey;
 }
 
 export interface IGeoJSONFeature extends GeoJSON.Feature<GeoJSON.GeometryObject, IFeatureProperties> {
   type: 'Feature';
-  bbox?: geojson.BBox;
+  bbox?: any;
 }
 
 interface IBaseTile extends TileLayerProps {
@@ -43,7 +42,7 @@ export type CrsKey = 'Simple' | 'EPSG:3857' | 'EPSG:4326' | 'EPSG:3395' | 'EPSG:
 interface Props {
   geoJSON: IGeoJSONFeature[];
   crsKey: CrsKey;
-  getAssociatedValues: (cell: IResultSetElementKey) => IAssociatedValue[];
+  getAssociatedValues: (cell: IGridDataKey) => IAssociatedValue[];
 }
 
 const baseTiles: Record<'street' | 'topography', IBaseTile> = {
@@ -117,9 +116,8 @@ export const LeafletMap: React.FC<Props> = function LeafletMap({ geoJSON, crsKey
     (feature: IGeoJSONFeature, layer: leaflet.Layer) => {
       const associatedValues = getAssociatedValues(feature.properties.associatedCell);
       if (associatedValues.length > 0) {
-        let popupContent = '';
+        const table = document.createElement('table');
 
-        popupContent += '<table>';
         for (let i = 0; i < associatedValues.length; i++) {
           const { key, value } = associatedValues[i]!;
 
@@ -127,10 +125,20 @@ export const LeafletMap: React.FC<Props> = function LeafletMap({ geoJSON, crsKey
             continue;
           }
 
-          popupContent += '<tr><td>' + key + '</td><td>' + value + '</td></tr>';
+          const tr = document.createElement('tr');
+
+          const tdKey = document.createElement('td');
+          tdKey.style.paddingRight = '8px';
+          tdKey.textContent = String(key);
+
+          const tdValue = document.createElement('td');
+          tdValue.textContent = String(value);
+
+          tr.appendChild(tdKey);
+          tr.appendChild(tdValue);
+          table.appendChild(tr);
         }
-        popupContent += '</table>';
-        layer.bindPopup(popupContent, popupOption);
+        layer.bindPopup(table.outerHTML, popupOption);
       }
     },
     [getAssociatedValues],

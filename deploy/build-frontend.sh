@@ -3,11 +3,11 @@ set -Eeuo pipefail
 
 echo "Build static content"
 
-mkdir ./cloudbeaver/web
+mkdir -p ./cloudbeaver/web
 
 cd ../../cloudbeaver/webapp
 
-yarn
+yarn install --immutable
 cd ./packages/product-default
 yarn run bundle
 
@@ -28,4 +28,4 @@ echo "Copy static content"
 
 cp -rp ../webapp/packages/product-default/lib/* cloudbeaver/web
 
-echo "Cloudbeaver is ready. Run run-server.sh in cloudbeaver folder to start the server."
+echo "Cloudbeaver is ready. Run run-cloudbeaver-server.sh in cloudbeaver folder to start the server."

@@ -14,25 +14,26 @@ jobs:
 
     defaults:
       run:
-        working-directory: ./webapp
-        
+        working-directory: ./cloudbeaver/webapp
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudbeaver
+        uses: actions/checkout@v4
+        with:
+          path: cloudbeaver
 
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: webapp/yarn.lock
+          node-version: "lts/*"
+          cache: "yarn"
+          cache-dependency-path: "./cloudbeaver/webapp/yarn.lock"
 
-      - name: restore node_modules
-        uses: actions/cache@v4
-        with:
-          path: "**/node_modules"
-          key: ${{ runner.os }}-node_modules-${{ hashFiles('webapp/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-node_modules-
+      # - run: yarn install --immutable
+      #   working-directory: ./cloudbeaver/webapp/common-typescript
+
+      # - run: yarn install --immutable
+      #   working-directory: ./cloudbeaver/webapp/common-react
 
       - run: |
           yarn install --immutable

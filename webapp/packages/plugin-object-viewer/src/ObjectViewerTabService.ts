@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,6 @@ import {
   ConnectionExecutionContextResource,
   ConnectionInfoActiveProjectKey,
   ConnectionInfoResource,
-  ConnectionNavNodeService,
   connectionProvider,
   createConnectionParam,
   executionContextProvider,
@@ -35,6 +34,7 @@ import {
 import { projectProvider } from '@cloudbeaver/core-projects';
 import { type ResourceKey, resourceKeyList, type ResourceKeySimple, ResourceKeyUtils } from '@cloudbeaver/core-resource';
 import { type ITab, NavigationTabsService, TabHandler } from '@cloudbeaver/plugin-navigation-tabs';
+import { ConnectionNavNodeService } from '@cloudbeaver/plugin-connections';
 
 import type { IObjectViewerTabContext } from './IObjectViewerTabContext.js';
 import type { IObjectViewerTabState } from './IObjectViewerTabState.js';
@@ -45,7 +45,16 @@ import { objectViewerTabHandlerKey } from './objectViewerTabHandlerKey.js';
 const ObjectViewerPanel = importLazyComponent(() => import('./ObjectViewerPanel/ObjectViewerPanel.js').then(m => m.ObjectViewerPanel));
 const ObjectViewerTab = importLazyComponent(() => import('./ObjectViewerTab.js').then(m => m.ObjectViewerTab));
 
-@injectable()
+@injectable(() => [
+  NavNodeManagerService,
+  DBObjectPageService,
+  NotificationService,
+  NavigationTabsService,
+  ConnectionInfoResource,
+  ConnectionNavNodeService,
+  NavTreeResource,
+  ConnectionExecutionContextResource,
+])
 export class ObjectViewerTabService {
   readonly tabHandler: TabHandler<IObjectViewerTabState>;
 
@@ -67,6 +76,7 @@ export class ObjectViewerTabService {
       onSelect: this.selectObjectTab.bind(this),
       onClose: this.closeObjectTab.bind(this),
       canClose: this.canCloseObjectTab.bind(this),
+      onUnload: this.unloadObjectTab.bind(this),
 
       extensions: [
         projectProvider(this.getProject.bind(this)),
@@ -102,6 +112,11 @@ export class ObjectViewerTabService {
         context.tab.handlerState.objectId = data.newNodeId;
       }
     });
+  }
+
+  private async unloadObjectTab(tab: ITab<IObjectViewerTabState>) {
+    // TODO: we need to call unloadPages, but it's not implemented in the DBObjectPageService
+    await this.dbObjectPageService.closePages(tab);
   }
 
   isPageActive(tab: ITab<IObjectViewerTabState>, page: ObjectPage): boolean {

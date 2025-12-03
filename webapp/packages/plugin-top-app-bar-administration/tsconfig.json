@@ -1,19 +1,26 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@cloudbeaver/tsconfig/tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/tsconfig.tsbuildinfo",
+    "composite": true
   },
   "references": [
     {
-      "path": "../core-di/tsconfig.json"
+      "path": "../core-blocks"
     },
     {
-      "path": "../plugin-administration/tsconfig.json"
+      "path": "../core-cli"
     },
     {
-      "path": "../plugin-top-app-bar/tsconfig.json"
+      "path": "../core-di"
+    },
+    {
+      "path": "../plugin-administration"
+    },
+    {
+      "path": "../plugin-top-app-bar"
     }
   ],
   "include": [
@@ -25,7 +32,6 @@
   ],
   "exclude": [
     "**/node_modules",
-    "lib/**/*",
-    "dist/**/*"
+    "lib/**/*"
   ]
 }

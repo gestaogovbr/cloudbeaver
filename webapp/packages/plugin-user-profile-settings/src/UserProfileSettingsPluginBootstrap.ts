@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ const UserProfileSettings = importLazyComponent(() => import('./UserProfileSetti
 
 const SETTINGS_TAB_ID = 'settings';
 
-@injectable()
+@injectable(() => [UserProfileTabsService, MenuService, ActionService, UserProfileOptionsPanelService, UserSettingsService, CommonDialogService])
 export class UserProfileSettingsPluginBootstrap extends Bootstrap {
   constructor(
     private readonly userProfileTabsService: UserProfileTabsService,
@@ -37,12 +37,12 @@ export class UserProfileSettingsPluginBootstrap extends Bootstrap {
         return;
       }
 
-      const result = await this.commonDialogService.open(ConfirmationDialog, {
+      const { status } = await this.commonDialogService.open(ConfirmationDialog, {
         title: 'ui_save_reminder',
         message: 'ui_are_you_sure',
       });
 
-      if (result === DialogueStateResult.Rejected) {
+      if (status === DialogueStateResult.Rejected) {
         ExecutorInterrupter.interrupt(context);
         return;
       }
@@ -66,6 +66,7 @@ export class UserProfileSettingsPluginBootstrap extends Bootstrap {
 
     this.actionService.addHandler({
       id: 'settings',
+      menus: [TOP_NAV_BAR_SETTINGS_MENU],
       actions: [ACTION_SETTINGS],
       getActionInfo(context, action) {
         return {

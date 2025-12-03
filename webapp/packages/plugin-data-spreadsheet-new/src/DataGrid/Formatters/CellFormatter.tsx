@@ -1,18 +1,17 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
-import { useContext, useState } from 'react';
+import { use, useContext } from 'react';
+import { DataGridCellInnerContext } from '@cloudbeaver/plugin-data-grid';
 
 import { getComputed, s, useObjectRef, useS } from '@cloudbeaver/core-blocks';
-import type { RenderCellProps } from '@cloudbeaver/plugin-data-grid';
-import type { IDataPresentationActions, IResultSetElementKey, IResultSetRowKey } from '@cloudbeaver/plugin-data-viewer';
+import type { IDataPresentationActions, IGridDataKey } from '@cloudbeaver/plugin-data-viewer';
 
-import { EditingContext } from '../../Editing/EditingContext.js';
 import { CellContext } from '../CellRenderer/CellContext.js';
 import { DataGridContext } from '../DataGridContext.js';
 import { TableDataContext } from '../TableDataContext.js';
@@ -20,46 +19,57 @@ import style from './CellFormatter.module.css';
 import { CellFormatterFactory } from './CellFormatterFactory.js';
 import { CellMenu } from './Menu/CellMenu.js';
 
-interface Props extends RenderCellProps<IResultSetRowKey> {
-  className?: string;
+interface Props {
+  rowIdx: number;
+  colIdx: number;
 }
 
-export const CellFormatter = observer<Props>(function CellFormatter({ className, ...rest }) {
+export const CellFormatter = observer<Props>(function CellFormatter({ rowIdx, colIdx }) {
   const context = useContext(DataGridContext);
   const tableDataContext = useContext(TableDataContext);
+  const innerCellContext = use(DataGridCellInnerContext);
   const cellContext = useContext(CellContext);
-  const editingContext = useContext(EditingContext);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const isEditing = cellContext.isEditing;
-  const showCellMenu = getComputed(() => !isEditing && (cellContext.isFocused || cellContext.mouse.state.mouseEnter || menuVisible));
+
+  const cell = cellContext.cell;
+  const showCellMenu = getComputed(
+    () => !!cell && (innerCellContext?.isFocused || cellContext.isFocused || cellContext.isHovered || cellContext.isMenuVisible),
+  );
   const styles = useS(style);
 
-  const spreadsheetActions = useObjectRef<IDataPresentationActions<IResultSetElementKey>>({
+  const spreadsheetActions = useObjectRef<IDataPresentationActions<IGridDataKey>>({
     edit(position) {
-      const idx = tableDataContext.getColumnIndexFromColumnKey(position.column);
+      const colIdx = tableDataContext.getColumnIndexFromColumnKey(position.column);
       const rowIdx = tableDataContext.getRowIndexFromKey(position.row);
 
-      if (idx !== -1) {
-        editingContext.edit({ idx, rowIdx });
+      if (colIdx !== -1) {
+        context.getDataGridApi()?.openEditor({ colIdx, rowIdx });
       }
     },
   });
 
+  function handleCellMenuStateSwitch(visible: boolean): void {
+    if (cellContext.isMenuVisible && !visible) {
+      cellContext.setHover(false);
+    }
+
+    cellContext.setMenuVisibility(visible);
+  }
+
   return (
-    <div className={s(styles, { wrapper: true }, className)}>
+    <div className={s(styles, { wrapper: true })}>
       <div className={s(styles, { container: true })}>
-        <CellFormatterFactory {...rest} isEditing={isEditing} />
+        <CellFormatterFactory rowIdx={rowIdx} colIdx={colIdx} />
       </div>
-      {showCellMenu && cellContext.cell && (
+      {showCellMenu && (
         <div className={s(styles, { menuContainer: true })}>
           <CellMenu
-            cellKey={cellContext.cell}
+            cellKey={cell!}
             model={context.model}
             actions={context.actions}
             spreadsheetActions={spreadsheetActions}
             resultIndex={context.resultIndex}
             simple={context.simple}
-            onStateSwitch={setMenuVisible}
+            onStateSwitch={handleCellMenuStateSwitch}
           />
         </div>
       )}

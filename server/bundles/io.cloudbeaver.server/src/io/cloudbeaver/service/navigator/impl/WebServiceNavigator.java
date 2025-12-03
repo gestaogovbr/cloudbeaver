@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,7 @@
 package io.cloudbeaver.service.navigator.impl;
 
 
-import io.cloudbeaver.BaseWebProjectImpl;
-import io.cloudbeaver.DBWebException;
-import io.cloudbeaver.WebServiceUtils;
+import io.cloudbeaver.*;
 import io.cloudbeaver.model.WebCommandContext;
 import io.cloudbeaver.model.WebConnectionInfo;
 import io.cloudbeaver.model.rm.DBNAbstractResourceManagerNode;
@@ -30,6 +28,7 @@ import io.cloudbeaver.service.navigator.WebCatalog;
 import io.cloudbeaver.service.navigator.WebNavigatorNodeInfo;
 import io.cloudbeaver.service.navigator.WebStructContainers;
 import io.cloudbeaver.service.security.SMUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
 import io.cloudbeaver.utils.WebConnectionFolderUtils;
 import io.cloudbeaver.utils.WebEventUtils;
 import org.jkiss.code.NotNull;
@@ -41,7 +40,9 @@ import org.jkiss.dbeaver.model.edit.DBEObjectMaker;
 import org.jkiss.dbeaver.model.edit.DBEObjectRenamer;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContextDefaults;
+import org.jkiss.dbeaver.model.exec.DBExecUtils;
 import org.jkiss.dbeaver.model.navigator.*;
+import org.jkiss.dbeaver.model.navigator.fs.DBNPathBase;
 import org.jkiss.dbeaver.model.navigator.meta.DBXTreeItem;
 import org.jkiss.dbeaver.model.rm.RMControllerProvider;
 import org.jkiss.dbeaver.model.rm.RMProject;
@@ -53,7 +54,6 @@ import org.jkiss.dbeaver.model.struct.DBSObjectFilter;
 import org.jkiss.dbeaver.model.struct.rdb.DBSCatalog;
 import org.jkiss.dbeaver.model.struct.rdb.DBSSchema;
 import org.jkiss.dbeaver.model.websocket.WSConstants;
-import org.jkiss.dbeaver.model.websocket.event.datasource.WSDataSourceProperty;
 import org.jkiss.dbeaver.model.websocket.event.resource.WSResourceProperty;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.CommonUtils;
@@ -108,6 +108,14 @@ public class WebServiceNavigator implements DBWServiceNavigator {
             Set<String> nodeIds = new HashSet<>(); // filter duplicate node ids
 
             for (DBNNode node : nodeChildren) {
+                // TODO: find a better way to filter out empty folder nodes for non-admin users
+                if (node instanceof DBNLocalFolder localFolderNode &&
+                    localFolderNode.getDataSourceRegistry() instanceof WebGlobalProjectRegistryProxy globalProjectRegistryProxy
+                ) {
+                    if (!globalProjectRegistryProxy.getAllFolders().contains(localFolderNode.getFolder())) {
+                        continue;
+                    }
+                }
                 if (node instanceof DBNDatabaseFolder folderNode && CommonUtils.isEmpty(folderNode.getMeta().getChildren(null))) {
                     // Skip empty folders. Folder may become empty if their nested elements are provided by UI plugins.
                     continue;
@@ -130,6 +138,12 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                         );
                         continue;
                     }
+                    var customConnectionsEnabled =
+                        ServletAppUtils.getServletApplication().getAppConfiguration().isSupportsCustomConnections()
+                            || SMUtils.isRMAdmin(session);
+                    if (node instanceof DBNProject project && !customConnectionsEnabled && project.getProject().isPrivateProject()) {
+                        continue;
+                    }
                     nodeIds.add(node.getNodeUri());
                     result.add(new WebNavigatorNodeInfo(session, node));
                 }
@@ -150,7 +164,7 @@ public class WebServiceNavigator implements DBWServiceNavigator {
     @Override
     public List<WebNavigatorNodeInfo> getNavigatorNodeParents(
         @NotNull WebSession session,
-        String nodePath
+        @NotNull String nodePath
     ) throws DBWebException {
         try {
             DBRProgressMonitor monitor = session.getProgressMonitor();
@@ -265,7 +279,24 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                 // Otherwise refresh may fail if navigator settings were changed.
                 DBPDataSource dataSource = dbnDataSource.getDataSource();
                 if (dataSource instanceof DBPRefreshableObject refreshableObject) {
+                    // During of refreshing datasource can create new default execution context and overwrite the old one.
+                    // It's not good for cloudbeaver because we use default execution context one for all script of the datasource
+                    // in that way all related scripts will use the same context and overwrite the user's define context
+                    // So why we need restore the default execution context after refreshing datasource
+                    DBCExecutionContext defaultContext = DBUtils.getDefaultContext(refreshableObject, false);
+                    DBCExecutionContextDefaults contextDefaults = defaultContext.getContextDefaults();
                     refreshableObject.refreshObject(monitor);
+                    if (contextDefaults != null && contextDefaults.getDefaultSchema() != null
+                        && contextDefaults.getDefaultCatalog() != null) {
+                        DBExecUtils.setExecutionContextDefaults(
+                            session.getProgressMonitor(),
+                            dataSource,
+                            defaultContext,
+                            contextDefaults.getDefaultCatalog().getName(),
+                            contextDefaults.getDefaultSchema().getName(),
+                            contextDefaults.getDefaultSchema().getName()
+                        );
+                    }
                 }
                 dbnDataSource.cleanupNode();
             } else if (node instanceof DBNLocalFolder) {
@@ -299,8 +330,17 @@ public class WebServiceNavigator implements DBWServiceNavigator {
 
         WebStructContainers structContainers = new WebStructContainers();
 
-        structContainers.setSupportsCatalogChange(contextDefaults != null && contextDefaults.supportsCatalogChange());
-        structContainers.setSupportsSchemaChange(contextDefaults != null && contextDefaults.supportsSchemaChange());
+        if (contextDefaults != null) {
+            structContainers.setSupportsCatalogChange(contextDefaults.supportsCatalogChange());
+            structContainers.setSupportsSchemaChange(contextDefaults.supportsSchemaChange());
+            if (contextDefaults.getDefaultSchema() != null) {
+                structContainers.setDefaultSchema(contextDefaults.getDefaultSchema().getName());
+            }
+            if (contextDefaults.getDefaultCatalog() != null) {
+                structContainers.setDefaultCatalog(contextDefaults.getDefaultCatalog().getName());
+            }
+        }
+
 
         DBRProgressMonitor monitor = connection.getSession().getProgressMonitor();
         List<? extends DBSObject> dbsObjects = this.getCatalogs(
@@ -429,33 +469,17 @@ public class WebServiceNavigator implements DBWServiceNavigator {
     @NotNull
     private String renameConnectionFolder(@NotNull WebSession session, DBNNode node, @NotNull String newName) throws DBException {
         WebConnectionFolderUtils.validateConnectionFolder(newName);
-        List<String> siblings = Arrays.stream(
-            ((DBNLocalFolder) node).getLogicalParent().getChildren(session.getProgressMonitor()))
-            .filter(n -> n instanceof DBNLocalFolder)
-            .map(DBNNode::getName).toList();
-        if (siblings.contains(newName)) {
-            throw new DBWebException("Name " + newName + " is unavailable or invalid");
+        DBNNode[] children = ((DBNLocalFolder) node).getLogicalParent().getChildren(session.getProgressMonitor());
+        if (children != null) {
+            List<String> siblings = Arrays.stream(children)
+                .filter(n -> n instanceof DBNLocalFolder)
+                .map(DBNNode::getName).toList();
+            if (siblings.contains(newName)) {
+                throw new DBWebException("Name " + newName + " is unavailable or invalid");
+            }
         }
-        var oldNodePath = node.getNodeItemPath();
         node.rename(session.getProgressMonitor(), newName);
-        var newNodePath = node.getNodeItemPath();
-        addNavigatorNodeMoveEvent(session, node, oldNodePath, newNodePath);
         return node.getName();
-    }
-
-    private void addNavigatorNodeMoveEvent(@NotNull WebSession session, DBNNode node, String oldNodePath, String newNodePath) {
-        WebEventUtils.addNavigatorNodeUpdatedEvent(
-            node.getOwnerProject(),
-            session,
-            oldNodePath,
-            WSConstants.EventAction.DELETE
-        );
-        WebEventUtils.addNavigatorNodeUpdatedEvent(
-            node.getOwnerProject(),
-            session,
-            newNodePath,
-            WSConstants.EventAction.CREATE
-        );
     }
 
     @NotNull
@@ -545,14 +569,7 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                         throw e;
                     }
                 } else if (node instanceof DBNLocalFolder) {
-                    var nodePath = node.getNodeItemPath();
                     node.getOwnerProject().getDataSourceRegistry().removeFolder(((DBNLocalFolder) node).getFolder(), false);
-                    WebEventUtils.addNavigatorNodeUpdatedEvent(
-                        session.getProjectById(projectId),
-                        session,
-                        nodePath,
-                        WSConstants.EventAction.DELETE
-                    );
                 } else if (node instanceof DBNResourceManagerResource) {
                     DBNResourceManagerResource rmResource = ((DBNResourceManagerResource) node);
                     String resourceProjectId = rmResource.getResourceProject().getId();
@@ -567,7 +584,7 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                 }
             }
             if (containsFolderNodes) {
-                WebServiceUtils.updateConfigAndRefreshDatabases(session, projectId);
+                WebServiceUtils.refreshDatabases(session, projectId);
             }
             return nodes.size();
 
@@ -588,6 +605,8 @@ public class WebServiceNavigator implements DBWServiceNavigator {
             return SMUtils.hasProjectPermission(session, rmProject, RMProjectPermission.DATA_SOURCES_EDIT);
         } else if (node instanceof DBNAbstractResourceManagerNode) {
             return SMUtils.hasProjectPermission(session, rmProject, RMProjectPermission.RESOURCE_EDIT);
+        } else if (node instanceof DBNPathBase) {
+            return !DBWorkbench.isDistributed() || session.hasPermission(DBWConstants.PERMISSION_FS_RESOURCE_EDIT);
         }
         return true;
     }
@@ -600,29 +619,32 @@ public class WebServiceNavigator implements DBWServiceNavigator {
     ) throws DBWebException {
         try {
             DBRProgressMonitor monitor = session.getProgressMonitor();
-            DBNNode folderNode;
             DBNModel navigatorModel = session.getNavigatorModelOrThrow();
-            folderNode = navigatorModel.getNodeByPath(monitor, folderNodePath);
+            DBNNode folderNode = navigatorModel.getNodeByPath(monitor, folderNodePath);
+            if (folderNode == null) {
+                throw new DBException("Folder node '" + folderNodePath + "' not found");
+            }
             for (String path : nodePaths) {
                 DBNNode node = navigatorModel.getNodeByPath(monitor, path);
                 if (node == null) {
                     throw new DBWebException("Navigator node '"  + path + "' not found");
                 }
                 checkProjectEditAccess(node, session);
-                if (node instanceof DBNDataSource) {
-                    DBPDataSourceFolder folder = WebConnectionFolderUtils.getParentFolder(folderNode);
-                    ((DBNDataSource) node).moveToFolder(folderNode.getOwnerProject(), folder);
-                    node.getOwnerProject().getDataSourceRegistry().updateDataSource(
-                        ((DBNDataSource) node).getDataSourceContainer());
-                    WebEventUtils.addDataSourceUpdatedEvent(
-                        node.getOwnerProject(),
-                        session,
-                        ((DBNDataSource) node).getDataSourceContainer().getId(),
-                        WSConstants.EventAction.UPDATE,
-                        WSDataSourceProperty.CONFIGURATION
-                    );
-                } else if (node instanceof DBNLocalFolder) {
-                    DBPDataSourceFolder parentFolder = WebConnectionFolderUtils.getParentFolder(folderNode);
+                if (node.getNodeUri().equals(folderNode.getNodeUri())) {
+                    throw new DBWebException("Cannot move node inside itself");
+                }
+                if (node instanceof DBNDataSource dataSourceNode) {
+                    DBPDataSourceFolder folder = null;
+                    if (folderNode instanceof DBNLocalFolder localFolderNode) {
+                        folder = localFolderNode.getFolder();
+                    }
+                    dataSourceNode.moveToFolder(folderNode.getOwnerProject(), folder);
+                    node.getOwnerProject().getDataSourceRegistry().updateDataSource(dataSourceNode.getDataSourceContainer());
+                } else if (node instanceof DBNLocalFolder dbnLocalFolder) {
+                    DBPDataSourceFolder parentFolder = null;
+                    if (folderNode instanceof DBNLocalFolder parentFolderNode) {
+                        parentFolder = parentFolderNode.getFolder();
+                    }
                     if (parentFolder != null) {
                         List<String> siblings = Arrays.stream(parentFolder.getChildren())
                             .map(DBPDataSourceFolder::getName)
@@ -631,15 +653,12 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                             throw new DBWebException("Node " + folderNodePath + " contains folder with name '" + node.getName() + "'");
                         }
                     }
-                    DBNLocalFolder dbnLocalFolder = ((DBNLocalFolder) node);
-                    var oldNodePath = node.getNodeItemPath();
                     node.getOwnerProject().getDataSourceRegistry().moveFolder(
                         dbnLocalFolder.getFolder().getFolderPath(),
                         dbnLocalFolder.generateNewFolderPath(parentFolder, dbnLocalFolder.getNodeDisplayName())
                     );
-                    var newNodePath = node.getNodeItemPath();
-                    WebServiceUtils.updateConfigAndRefreshDatabases(session, node.getOwnerProject().getId());
-                    addNavigatorNodeMoveEvent(session, node, oldNodePath, newNodePath);
+                    node.getOwnerProject().getDataSourceRegistry().checkForErrors();
+                    WebServiceUtils.refreshDatabases(session, node.getOwnerProject().getId());
                 } else if (node instanceof DBNResourceManagerResource) {
                     boolean rmNewNode = folderNode instanceof DBNAbstractResourceManagerNode;
                     DBNResourceManagerResource rmOldNode = (DBNResourceManagerResource) node;

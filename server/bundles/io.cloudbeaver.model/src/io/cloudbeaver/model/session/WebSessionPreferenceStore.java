@@ -17,17 +17,25 @@
 package io.cloudbeaver.model.session;
 
 import org.jkiss.code.NotNull;
+import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.model.impl.preferences.AbstractUserPreferenceStore;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
+import org.jkiss.utils.CommonUtils;
 
 import java.io.IOException;
 import java.util.Map;
 
 public class WebSessionPreferenceStore extends AbstractUserPreferenceStore {
+
+    @NotNull
+    private final WebUserContext userContext;
+
     public WebSessionPreferenceStore(
+        @NotNull WebUserContext userContext,
         @NotNull DBPPreferenceStore parentStore
     ) {
         super(parentStore);
+        this.userContext = userContext;
     }
 
     @NotNull
@@ -36,8 +44,17 @@ public class WebSessionPreferenceStore extends AbstractUserPreferenceStore {
     }
 
     // to avoid redundant sm api call
-    public void updatePreferenceValues(@NotNull Map<String, Object> newValues) {
-        userPreferences.putAll(newValues);
+    public void updatePreferenceValues(@NotNull Map<String, Object> newValues) throws DBException {
+        if (userContext.getUser() != null) {
+            userContext.getSecurityController().setCurrentUserParameters(newValues);
+        }
+        for (Map.Entry<String, Object> entry : newValues.entrySet()) {
+            if (entry.getValue() == null) {
+                userPreferences.remove(entry.getKey());
+            } else {
+                userPreferences.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     @Override
@@ -46,12 +63,12 @@ public class WebSessionPreferenceStore extends AbstractUserPreferenceStore {
     }
 
     @Override
-    public String getDefaultString(String name) {
+    public String getDefaultString(@NotNull String name) {
         return parentStore.getDefaultString(name);
     }
 
     @Override
-    public boolean isDefault(String name) {
+    public boolean isDefault(@NotNull String name) {
         return !userPreferences.containsKey(name) && parentStore.isDefault(name);
     }
 
@@ -61,12 +78,21 @@ public class WebSessionPreferenceStore extends AbstractUserPreferenceStore {
     }
 
     @Override
-    public void setToDefault(String name) {
+    public void setToDefault(@NotNull String name) {
         throw new RuntimeException("Not implemented");
     }
 
     @Override
     public void save() throws IOException {
         throw new RuntimeException("Not implemented");
+    }
+
+    public boolean getUserPreferenceBoolean(@NotNull String name, boolean fallbackValue) {
+        String value = CommonUtils.toString(userPreferences.get(name));
+        if (value.isEmpty()) {
+            return fallbackValue;
+        } else {
+            return toBoolean(value);
+        }
     }
 }

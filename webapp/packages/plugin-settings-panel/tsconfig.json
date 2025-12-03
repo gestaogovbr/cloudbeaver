@@ -1,28 +1,44 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@cloudbeaver/tsconfig/tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/tsconfig.tsbuildinfo",
+    "composite": true
   },
   "references": [
     {
-      "path": "../core-blocks/tsconfig.json"
+      "path": "../../common-react/@dbeaver/ui-kit"
     },
     {
-      "path": "../core-di/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/cli"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/js-helpers"
     },
     {
-      "path": "../core-settings/tsconfig.json"
+      "path": "../core-blocks"
     },
     {
-      "path": "../core-utils/tsconfig.json"
+      "path": "../core-cli"
     },
     {
-      "path": "../plugin-navigation-tree/tsconfig.json"
+      "path": "../core-di"
+    },
+    {
+      "path": "../core-executor"
+    },
+    {
+      "path": "../core-localization"
+    },
+    {
+      "path": "../core-settings"
+    },
+    {
+      "path": "../core-utils"
+    },
+    {
+      "path": "../plugin-navigation-tree"
     }
   ],
   "include": [
@@ -34,7 +50,6 @@
   ],
   "exclude": [
     "**/node_modules",
-    "lib/**/*",
-    "dist/**/*"
+    "lib/**/*"
   ]
 }

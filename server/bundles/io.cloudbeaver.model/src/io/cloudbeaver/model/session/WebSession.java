@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,20 @@
  */
 package io.cloudbeaver.model.session;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.InstanceCreator;
-import com.google.gson.Strictness;
 import io.cloudbeaver.*;
+import io.cloudbeaver.model.CustomCancelableJob;
 import io.cloudbeaver.model.WebAsyncTaskInfo;
 import io.cloudbeaver.model.WebConnectionInfo;
 import io.cloudbeaver.model.WebServerMessage;
-import io.cloudbeaver.model.app.WebApplication;
-import io.cloudbeaver.model.app.WebAuthApplication;
+import io.cloudbeaver.model.app.ServletApplication;
+import io.cloudbeaver.model.app.ServletAuthApplication;
+import io.cloudbeaver.model.session.monitor.TaskProgressMonitor;
 import io.cloudbeaver.model.user.WebUser;
 import io.cloudbeaver.service.DBWSessionHandler;
 import io.cloudbeaver.service.sql.WebSQLConstants;
 import io.cloudbeaver.utils.CBModelConstants;
 import io.cloudbeaver.utils.WebDataSourceUtils;
+import io.cloudbeaver.utils.WebEventUtils;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
@@ -40,6 +39,7 @@ import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBFileController;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
+import org.jkiss.dbeaver.model.DBPEventListener;
 import org.jkiss.dbeaver.model.access.DBAAuthCredentials;
 import org.jkiss.dbeaver.model.access.DBACredentialsProvider;
 import org.jkiss.dbeaver.model.auth.*;
@@ -49,21 +49,15 @@ import org.jkiss.dbeaver.model.fs.DBFFileSystemManager;
 import org.jkiss.dbeaver.model.meta.Association;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.navigator.DBNModel;
-import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
-import org.jkiss.dbeaver.model.rm.RMController;
-import org.jkiss.dbeaver.model.rm.RMProject;
-import org.jkiss.dbeaver.model.rm.RMProjectType;
-import org.jkiss.dbeaver.model.rm.RMUtils;
+import org.jkiss.dbeaver.model.rm.*;
 import org.jkiss.dbeaver.model.runtime.AbstractJob;
 import org.jkiss.dbeaver.model.runtime.BaseProgressMonitor;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
-import org.jkiss.dbeaver.model.runtime.ProxyProgressMonitor;
 import org.jkiss.dbeaver.model.security.SMAdminController;
 import org.jkiss.dbeaver.model.security.SMConstants;
 import org.jkiss.dbeaver.model.security.SMController;
 import org.jkiss.dbeaver.model.sql.DBQuotaException;
 import org.jkiss.dbeaver.model.websocket.event.MessageType;
-import org.jkiss.dbeaver.model.websocket.event.WSEventType;
 import org.jkiss.dbeaver.model.websocket.event.WSSessionLogUpdatedEvent;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.CommonUtils;
@@ -72,6 +66,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -93,7 +88,7 @@ public class WebSession extends BaseWebSession
     public static String RUNTIME_PARAM_AUTH_INFOS = "auth-infos";
     private final AtomicInteger taskCount = new AtomicInteger();
 
-    private String lastRemoteAddr;
+    private final String lastRemoteAddr;
     private String lastRemoteUserAgent;
 
     private String locale;
@@ -111,16 +106,18 @@ public class WebSession extends BaseWebSession
     private DBNModel navigatorModel;
     private final DBRProgressMonitor progressMonitor = new SessionProgressMonitor();
     private final Map<String, DBWSessionHandler> sessionHandlers;
+    private final WebDataSourceConnectEventListener connectListener = new WebDataSourceConnectEventListener(this);
 
     public WebSession(
         @NotNull WebHttpRequestInfo requestInfo,
-        @NotNull WebAuthApplication application,
+        @NotNull ServletAuthApplication application,
         @NotNull Map<String, DBWSessionHandler> sessionHandlers
     ) throws DBException {
         this(requestInfo.getId(),
             CommonUtils.toString(requestInfo.getLocale()),
             application,
-            sessionHandlers
+            sessionHandlers,
+            requestInfo.getLastRemoteAddress()
         );
         updateSessionParameters(requestInfo);
     }
@@ -128,10 +125,15 @@ public class WebSession extends BaseWebSession
     protected WebSession(
         @NotNull String id,
         @Nullable String locale,
-        @NotNull WebApplication application,
-        @NotNull Map<String, DBWSessionHandler> sessionHandlers
+        @NotNull ServletApplication application,
+        @NotNull Map<String, DBWSessionHandler> sessionHandlers,
+        @NotNull String remoteAddr
     ) throws DBException {
         super(id, application);
+        if (CommonUtils.isEmpty(remoteAddr)) {
+            throw new DBException("Remote address cannot be empty");
+        }
+        this.lastRemoteAddr = remoteAddr;
         this.lastAccessTime = this.createTime;
         this.sessionHandlers = sessionHandlers;
         setLocale(CommonUtils.toString(locale, this.locale));
@@ -265,6 +267,11 @@ public class WebSession extends BaseWebSession
         clearSessionContext();
     }
 
+    @NotNull
+    public DBPEventListener getDataSourceConnectListener() {
+        return connectListener;
+    }
+
     private void initNavigatorModel() {
 
         // Cleanup current data
@@ -298,7 +305,7 @@ public class WebSession extends BaseWebSession
             for (RMProject project : rmProjects) {
                 createWebProject(project);
             }
-            if (user == null && application.getAppConfiguration().isAnonymousAccessEnabled()) {
+            if (user == null && application.isAnonymousAccessEnabled()) {
                 WebProjectImpl anonymousProject = createWebProject(RMUtils.createAnonymousProject());
                 anonymousProject.setInMemory(true);
             }
@@ -316,8 +323,9 @@ public class WebSession extends BaseWebSession
         if (project.isGlobal()) {
             sessionProject = createGlobalProject(project);
         } else {
-            sessionProject = new WebSessionProjectImpl(this, project, getProjectPath(project));
+            sessionProject = createSessionProject(project);
         }
+        sessionProject.refreshProjectSettings();
         // do not load data sources for anonymous project
         if (project.getType() == RMProjectType.USER && userContext.getUser() == null) {
             sessionProject.setInMemory(true);
@@ -326,7 +334,15 @@ public class WebSession extends BaseWebSession
         if (!project.isShared() || application.isConfigurationMode()) {
             getWorkspace().setActiveProject(sessionProject);
         }
+        log.info(String.format(
+            "Project created: [ID=%s, Name=%s, Type=%s, Creator=%s]",
+            project.getId(), project.getName(), project.getType(), project.getCreator()
+        ));
         return sessionProject;
+    }
+
+    protected WebSessionProjectImpl createSessionProject(@NotNull RMProject project) throws DBException {
+        return new WebSessionProjectImpl(this, project, getProjectPath(project));
     }
 
     @NotNull
@@ -382,9 +398,10 @@ public class WebSession extends BaseWebSession
 
 
     private synchronized void authAsAnonymousUser() throws DBException {
-        if (!application.getAppConfiguration().isAnonymousAccessEnabled()) {
+        if (!application.isAnonymousAccessEnabled()) {
             return;
         }
+
         SMAuthInfo authInfo = getSecurityController().authenticateAnonymousUser(this.id, getSessionParameters(), CB_SESSION_TYPE);
         updateSMSession(authInfo);
         notifySessionAuthChange();
@@ -447,7 +464,6 @@ public class WebSession extends BaseWebSession
     }
 
     public synchronized void updateSessionParameters(WebHttpRequestInfo requestInfo) {
-        this.lastRemoteAddr = requestInfo.getLastRemoteAddress();
         this.lastRemoteUserAgent = requestInfo.getLastRemoteUserAgent();
         this.cacheExpired = false;
     }
@@ -507,7 +523,7 @@ public class WebSession extends BaseWebSession
     ///////////////////////////////////////////////////////
     // Async model
 
-    public WebAsyncTaskInfo getAsyncTask(String taskId, String taskName, boolean create) {
+    public WebAsyncTaskInfo getAsyncTask(@NotNull String taskId, @NotNull String taskName, boolean create) {
         synchronized (asyncTasks) {
             WebAsyncTaskInfo taskInfo = asyncTasks.get(taskId);
             if (taskInfo == null && create) {
@@ -518,13 +534,13 @@ public class WebSession extends BaseWebSession
         }
     }
 
+    @NotNull
     public WebAsyncTaskInfo asyncTaskStatus(String taskId, boolean removeOnFinish) throws DBWebException {
         synchronized (asyncTasks) {
             WebAsyncTaskInfo taskInfo = asyncTasks.get(taskId);
             if (taskInfo == null) {
                 throw new DBWebException("Task '" + taskId + "' not found");
             }
-            taskInfo.setRunning(taskInfo.getJob() != null && !taskInfo.getJob().isFinished());
             if (removeOnFinish && !taskInfo.isRunning()) {
                 asyncTasks.remove(taskId);
             }
@@ -541,22 +557,47 @@ public class WebSession extends BaseWebSession
             }
         }
         AbstractJob job = taskInfo.getJob();
+        if (job instanceof CustomCancelableJob cancelableJob) {
+            cancelableJob.cancelJob(this, taskInfo);
+        }
         if (job != null) {
             job.cancel();
         }
         return true;
     }
 
-    public WebAsyncTaskInfo createAndRunAsyncTask(String taskName, WebAsyncTaskProcessor<?> runnable) {
+
+    public WebAsyncTaskInfo createAsyncTask(@NotNull String taskName) {
         int taskId = TASK_ID.incrementAndGet();
         WebAsyncTaskInfo asyncTask = getAsyncTask(String.valueOf(taskId), taskName, true);
+        return asyncTask;
+    }
 
-        AbstractJob job = new AbstractJob(taskName) {
+    public List<WebAsyncTaskInfo> findTasksByJob(@NotNull Class<? extends AbstractJob> jobClass) {
+        synchronized (asyncTasks) {
+            List<WebAsyncTaskInfo> result = new ArrayList<>();
+            for (WebAsyncTaskInfo task : asyncTasks.values()) {
+                if (task.getJob() != null && jobClass.isAssignableFrom(task.getJob().getClass())) {
+                    result.add(task);
+                }
+            }
+            return result;
+        }
+    }
+
+    public WebAsyncTaskInfo createAndRunAsyncTask(@NotNull String taskName, @NotNull WebAsyncTaskProcessor<?> runnable) {
+        WebAsyncTaskInfo asyncTask = createAsyncTask(taskName);
+        return runAsyncTask(asyncTask, runnable);
+    }
+
+    public WebAsyncTaskInfo runAsyncTask(@NotNull WebAsyncTaskInfo asyncTask, @NotNull WebAsyncTaskProcessor<?> runnable) {
+        AbstractJob job = new AbstractJob(asyncTask.getName()) {
             @Override
             protected IStatus run(DBRProgressMonitor monitor) {
                 int curTaskCount = taskCount.incrementAndGet();
 
-                TaskProgressMonitor taskMonitor = new TaskProgressMonitor(monitor, asyncTask);
+                DBRProgressMonitor taskMonitor = new TaskProgressMonitor(monitor, WebSession.this, asyncTask);
+
                 try {
                     Number queryLimit = application.getAppConfiguration().getResourceQuota(WebSQLConstants.QUOTA_PROP_QUERY_LIMIT);
                     if (queryLimit != null && curTaskCount > queryLimit.intValue()) {
@@ -567,8 +608,7 @@ public class WebSession extends BaseWebSession
                     runnable.run(taskMonitor);
                     asyncTask.setResult(runnable.getResult());
                     asyncTask.setExtendedResult(runnable.getExtendedResults());
-                    asyncTask.setStatus("Finished");
-                    asyncTask.setRunning(false);
+                    asyncTask.setStatus(DBWConstants.TASK_STATUS_FINISHED);
                 } catch (InvocationTargetException e) {
                     addSessionError(e.getTargetException());
                     asyncTask.setJobError(e.getTargetException());
@@ -576,6 +616,8 @@ public class WebSession extends BaseWebSession
                     asyncTask.setJobError(e);
                 } finally {
                     taskCount.decrementAndGet();
+                    asyncTask.setRunning(false);
+                    WebEventUtils.sendAsyncTaskEvent(WebSession.this, asyncTask);
                 }
                 return Status.OK_STATUS;
             }
@@ -596,10 +638,9 @@ public class WebSession extends BaseWebSession
             sessionMessages.add(message);
         }
         addSessionEvent(new WSSessionLogUpdatedEvent(
-            WSEventType.SESSION_LOG_UPDATED,
             this.userContext.getSmSessionId(),
             this.userContext.getUserId(),
-            MessageType.ERROR,
+            message.getType(),
             message.getMessage()));
     }
 
@@ -805,14 +846,8 @@ public class WebSession extends BaseWebSession
             // uncommented because we had the problem with non-native auth models
             // (for example, can't connect to DynamoDB if credentials are not saved)
             DBAAuthCredentials credentials = configuration.getAuthModel().loadCredentials(dataSourceContainer, configuration);
+            WebDataSourceUtils.updateCredentialsFromProperties(credentials, configuration.getAuthProperties());
 
-            InstanceCreator<DBAAuthCredentials> credTypeAdapter = type -> credentials;
-            Gson credGson = new GsonBuilder()
-                .setStrictness(Strictness.LENIENT)
-                .registerTypeAdapter(credentials.getClass(), credTypeAdapter)
-                .create();
-
-            credGson.fromJson(credGson.toJsonTree(configuration.getAuthProperties()), credentials.getClass());
             configuration.getAuthModel().provideCredentials(dataSourceContainer, configuration, credentials);
         } catch (DBException e) {
             addSessionError(e);
@@ -929,6 +964,11 @@ public class WebSession extends BaseWebSession
      */
     public void deleteSessionProject(@Nullable WebSessionProjectImpl project) {
         if (project != null) {
+            RMProject rmProject = project.getRMProject();
+            log.info(String.format(
+                "Project deleted: [ID=%s, Name=%s, Type=%s, Creator=%s]",
+                rmProject.getId(), rmProject.getName(), rmProject.getType(), rmProject.getCreator()
+            ));
             project.dispose();
         }
         getWorkspace().removeProject(project);
@@ -942,6 +982,16 @@ public class WebSession extends BaseWebSession
         super.addSessionProject(projectId);
         var rmProject = getRmController().getProject(projectId, false, false);
         createWebProject(rmProject);
+    }
+
+    @Override
+    public void updateSessionProject(@NotNull String projectId, @NotNull RMProjectInfo rmProjectInfo) throws DBException {
+        super.updateSessionProject(projectId, rmProjectInfo);
+        var project = getProjectById(projectId);
+        if (project == null) {
+            return;
+        }
+        project.updateProjectInfo(rmProjectInfo.getName(), rmProjectInfo.getDescription());
     }
 
     @Override
@@ -964,13 +1014,32 @@ public class WebSession extends BaseWebSession
     }
 
     @NotNull
-    public DBPPreferenceStore getUserPreferenceStore() {
+    public WebSessionPreferenceStore getUserPreferenceStore() {
         return getUserContext().getPreferenceStore();
     }
 
     @Nullable
     public WebSessionGlobalProjectImpl getGlobalProject() {
         return globalProject;
+    }
+
+    public void handleTaskConfirmation(
+        @NotNull String taskId,
+        boolean confirmed,
+        boolean skipConfirmations
+    ) {
+        String attributeName = WebSQLConstants.TASK_CONFIRMATION_ATTR_PREFIX + taskId;
+        if (confirmed && skipConfirmations) {
+            setAttribute(WebSQLConstants.SKIP_TASK_CONFIRMATIONS_ATTR, Boolean.TRUE);
+        }
+
+        CompletableFuture<Boolean> confirmationFuture = getAttribute(attributeName);
+        if (confirmationFuture != null) {
+            confirmationFuture.complete(confirmed);
+            removeAttribute(attributeName);
+        } else {
+            log.error("Received unexpected confirmation event for taskId: " + taskId);
+        }
     }
 
     private class SessionProgressMonitor extends BaseProgressMonitor {
@@ -985,26 +1054,8 @@ public class WebSession extends BaseWebSession
         }
     }
 
-    private static class TaskProgressMonitor extends ProxyProgressMonitor {
-
-        private final WebAsyncTaskInfo asyncTask;
-
-        public TaskProgressMonitor(DBRProgressMonitor original, WebAsyncTaskInfo asyncTask) {
-            super(original);
-            this.asyncTask = asyncTask;
-        }
-
-        @Override
-        public void beginTask(String name, int totalWork) {
-            super.beginTask(name, totalWork);
-            asyncTask.setStatus(name);
-        }
-
-        @Override
-        public void subTask(String name) {
-            super.subTask(name);
-            asyncTask.setStatus(name);
-        }
+    public boolean hasGlobalPermission(String permissionId) {
+        return true;
     }
 
     private record PersistentAttribute(Object value) {

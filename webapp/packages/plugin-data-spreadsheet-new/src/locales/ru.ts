@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['data_grid_table_empty_placeholder', 'Таблица не содержит колонок'],
   ['data_grid_table_editing', 'Редактировать'],
@@ -20,6 +13,7 @@ export default [
   ['data_grid_table_filter_cell_value', 'Значение ячейки'],
   ['data_grid_table_filter_custom_value', 'Произвольный'],
   ['data_grid_table_filter_reset_all_filters', 'Сбросить все фильтры'],
+  ['data_grid_table_filter_delete_for_column', 'Удалить фильтр для "{arg:column}"'],
   ['data_grid_table_disable_order', 'Отключена'],
   ['data_grid_table_disable_all_orders', 'Отменить сортировку всех колонок'],
   ['data_grid_table_delete_filters_and_orders', 'Отменить фильтры / сортировки'],
@@ -31,4 +25,6 @@ export default [
   ['data_grid_table_readonly_tooltip', 'Доступно только для чтения'],
   ['plugin_data_spreadsheet_new_settings_disable', 'Отключить табличное представление'],
   ['plugin_data_spreadsheet_new_settings_disable_description', 'Отключить табличное представление данных для всех пользователей'],
+  ['plugin_data_spreadsheet_new_settings_description_label', 'Показать описание колонки'],
+  ['plugin_data_spreadsheet_new_settings_description_label_description', 'Описание будет показано под именами колонок в заголовке таблицы'],
 ];

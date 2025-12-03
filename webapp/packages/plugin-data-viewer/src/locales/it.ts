@@ -1,12 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
-  ['plugin_data_viewer_data_viewer_settings_group', 'Data Viewer'],
+  ['plugin_data_viewer_data_viewer_settings_group', 'Data Editor'],
   ['table_header_sql_expression', 'Digita una espresione SQL per filtrare i risultati'],
   ['table_header_sql_expression_not_supported', 'Data filter is not supported'],
   ['data_viewer_tab_title', 'Dati'],
@@ -57,12 +50,6 @@ export default [
   ['data_viewer_copy_not_allowed', 'An ability to copy data is disabled'],
   ['data_viewer_copy_not_allowed_message', 'If this was unexpected, contact the administrator'],
   ['settings_data_editor', 'Data Editor'],
-  ['settings_data_editor_disable_edit_name', 'Disable Edit'],
-  ['settings_data_editor_disable_edit_description', 'Disable editing of data in Data Viewer for non-admin users'],
-  ['settings_data_editor_disable_data_copy_name', 'Disable Copy'],
-  ['settings_data_editor_disable_data_copy_description', 'Disable copying of data in Data Viewer for non-admin users'],
-  ['settings_data_editor_disable_data_export_name', 'Disable Export'],
-  ['settings_data_editor_disable_data_export_description', 'Disable exporting of data in Data Viewer for non-admin users'],
   ['settings_data_editor_fetch_max_name', 'Maximum fetch size'],
   ['settings_data_editor_fetch_max_description', 'Maximum number of rows to fetch'],
   ['settings_data_editor_fetch_default_name', 'Default fetch size'],

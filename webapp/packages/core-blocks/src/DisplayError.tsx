@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ interface Props {
 
 export const DisplayError = observer<Props>(function DisplayError({ root, children, error, errorInfo, className }) {
   const styles = useS(style);
-  const stack = errorInfo?.componentStack || error?.stack;
+  const stack = error?.stack;
 
   return (
     <div role="alert" tabIndex={0} className={s(styles, { error: true, root }, className)}>
@@ -36,11 +36,18 @@ export const DisplayError = observer<Props>(function DisplayError({ root, childr
         {root && <AppRefreshButton />}
         {children}
         {error && (
-          <div className={s(styles, { details: true })}>
-            {error.toString()}
-            {stack && <br />}
-            {stack}
-          </div>
+          <details className={s(styles, { details: true })}>
+            <summary>Details</summary>
+            <p>
+              {stack ? <code>{stack}</code> : error.toString()}
+              {errorInfo?.componentStack && (
+                <>
+                  <br />
+                  <code>{errorInfo.componentStack}</code>
+                </>
+              )}
+            </p>
+          </details>
         )}
       </div>
     </div>

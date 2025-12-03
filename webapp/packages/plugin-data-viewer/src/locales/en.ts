@@ -1,12 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
-  ['plugin_data_viewer_data_viewer_settings_group', 'Data Viewer'],
+  ['plugin_data_viewer_data_viewer_settings_group', 'Data Editor'],
   ['table_header_sql_expression', 'Enter a SQL expression to filter results, e.g. column_name=10'],
   ['table_header_sql_expression_not_supported', 'Data filter is not supported'],
   ['data_viewer_tab_title', 'Data'],
@@ -25,7 +18,7 @@ export default [
   ['data_viewer_action_auto_refresh_menu_stop_tooltip', 'Stop auto-refreshing data'],
   ['data_viewer_action_auto_refresh_menu_configure_tooltip', 'Configure auto-refresh settings'],
   ['data_viewer_action_auto_refresh_interval_tooltip', 'Set auto-refresh interval to {arg:interval}'],
-  ['data_viewer_action_edit_delete', 'Delete selected'],
+  ['data_viewer_action_edit_delete', 'Delete selected rows'],
   ['data_viewer_action_edit_add', 'Add'],
   ['data_viewer_action_edit_add_copy', 'Duplicate'],
   ['data_viewer_action_edit_revert', 'Cancel selected'],
@@ -49,7 +42,7 @@ export default [
   ['data_viewer_presentation_value_image_fit', 'Fit Window'],
   ['data_viewer_presentation_value_image_original_size', 'Original Size'],
   ['data_viewer_presentation_value_boolean_placeholder', "Can't show current value as boolean"],
-  ['data_viewer_presentation_value_content_truncated_placeholder', 'The value was truncated because of the'],
+  ['data_viewer_presentation_value_content_truncated_placeholder', 'The value was truncated because of the'],
   ['data_viewer_presentation_value_content_download_error', 'Download failed'],
   ['data_viewer_presentation_value_content_paste_error', 'Cannot load full text'],
   ['data_viewer_script_preview', 'Script'],
@@ -64,12 +57,6 @@ export default [
   ['data_viewer_copy_not_allowed', 'An ability to copy data is disabled'],
   ['data_viewer_copy_not_allowed_message', 'If this was unexpected, contact the administrator'],
   ['settings_data_editor', 'Data Editor'],
-  ['settings_data_editor_disable_edit_name', 'Disable Edit'],
-  ['settings_data_editor_disable_edit_description', 'Disable editing of data in Data Viewer for non-admin users'],
-  ['settings_data_editor_disable_data_copy_name', 'Disable Copy'],
-  ['settings_data_editor_disable_data_copy_description', 'Disable copying of data in Data Viewer for non-admin users'],
-  ['settings_data_editor_disable_data_export_name', 'Disable Export'],
-  ['settings_data_editor_disable_data_export_description', 'Disable exporting of data in Data Viewer for non-admin users'],
   ['settings_data_editor_fetch_max_name', 'Maximum fetch size'],
   ['settings_data_editor_fetch_max_description', 'Maximum number of rows to fetch'],
   ['settings_data_editor_fetch_default_name', 'Default fetch size'],

@@ -1,13 +1,7 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['plugin_connections_new_connection_dialog_title', 'New connection'],
   ['plugin_connections_connection_form_part_main', 'Main'],
+  ['plugin_connections_connection_form_part_main_auth_model', 'Authentication model'],
   ['plugin_connections_connection_form_part_properties', 'Driver Properties'],
   ['plugin_connections_connection_form_part_main_custom_host', 'Host'],
   ['plugin_connections_connection_form_part_main_custom_port', 'Port'],
@@ -33,10 +27,20 @@ export default [
   ['plugin_connections_menu_connections_label', 'Connection'],
   ['plugin_connections_action_disconnect_all_label', 'Disconnect All'],
   ['plugin_connections_settings', 'Connections'],
-  ['plugin_connections_settings_hide_connections_view_name', 'Hide connections'],
-  ['plugin_connections_settings_hide_connections_view_description', 'Connections will be hidden for all users except administrators'],
+  ['plugin_connections_settings_hide_connections_view_name', 'Hide connection view management'],
+  ['plugin_connections_settings_hide_connections_view_description', 'Connections view submenu will be hidden for all users except administrators'],
 
   ['plugin_connections_connection_ssl_enable', 'Enable SSL'],
+  ['plugin_connections_connection_ssl_optional', 'All SSL parameters are optional.'],
+  [
+    'plugin_connections_connection_ssl_description',
+    'You must specify SSL certificates if they are required by your server configuration. Settings on this page override Driver properties.',
+  ],
+  [
+    'plugin_connections_connection_ssl_note',
+    '{arg:productName} does not verify SSL configuration and relies on the driver implementation. Please refer to the driver documentation for more information.',
+  ],
+  ['plugin_connections_connection_ssl_docs', 'SSL configuration documentation'],
 
   ['plugin_connections_connection_form_shared_credentials_manage_info', 'You can manage credentials in the '],
   ['plugin_connections_connection_form_shared_credentials_manage_info_tab_link', 'Credentials tab'],
@@ -44,4 +48,10 @@ export default [
     'plugin_connections_connection_auth_secret_description',
     'There are multiple credentials available for authentication.\nPlease choose credentials you want to use.',
   ],
+  ['plugin_connections_connection_create_menu_title', 'New Connection'],
+  ['plugin_connections_connection_driver_not_installed_message', 'Driver is not installed. You can install it in the "Administration" part.'],
+  ['plugin_connections_connection_established', 'Connection is established'],
+  ['plugin_connections_connection_client_version', 'Client version: {arg:version} \n'],
+  ['plugin_connections_connection_server_version', 'Server version: {arg:version} \n'],
+  ['plugin_connections_connection_connection_time', 'Connection time: {arg:time} \n'],
 ];

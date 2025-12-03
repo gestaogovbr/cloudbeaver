@@ -23,13 +23,15 @@ import io.cloudbeaver.service.rm.DBWServiceRM;
 import io.cloudbeaver.service.rm.model.RMProjectPermissions;
 import io.cloudbeaver.service.rm.model.RMSubjectProjectPermissions;
 import io.cloudbeaver.service.security.SMUtils;
-import io.cloudbeaver.utils.WebAppUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
 import io.cloudbeaver.utils.WebEventUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.rm.RMController;
 import org.jkiss.dbeaver.model.rm.RMProject;
+import org.jkiss.dbeaver.model.rm.RMProjectInfo;
 import org.jkiss.dbeaver.model.rm.RMResource;
 import org.jkiss.dbeaver.model.secret.DBSSecretController;
 import org.jkiss.dbeaver.model.security.*;
@@ -48,6 +50,8 @@ import java.util.Set;
  * Web service implementation
  */
 public class WebServiceRM implements DBWServiceRM {
+
+    private static final Log log = Log.getLog(WebServiceRM.class);
 
     @Override
     public RMProject[] listProjects(@NotNull WebSession webSession) throws DBWebException {
@@ -254,12 +258,37 @@ public class WebServiceRM implements DBWServiceRM {
         try {
             RMProject rmProject = getResourceController(session).createProject(name, description);
             session.addSessionProject(rmProject.getId());
-            WebAppUtils.getWebApplication().getEventController().addEvent(
+            ServletAppUtils.getServletApplication().getEventController().addEvent(
                 WSProjectUpdateEvent.create(session.getSessionId(), session.getUserId(), rmProject.getId())
             );
             return rmProject;
         } catch (DBException e) {
             throw new DBWebException("Error creating project", e);
+        }
+    }
+
+    @Override
+    public RMProject updateProject(
+        @NotNull WebSession session,
+        @NotNull String projectId,
+        @Nullable String name,
+        @Nullable String description
+    ) throws DBWebException {
+        try {
+            var project = session.getProjectById(projectId);
+            if (project == null) {
+                throw new DBException("Project not found: " + projectId);
+            }
+            RMProjectInfo projectInfo = new RMProjectInfo(name, description);
+            RMProject rmProject = getResourceController(session).updateProject(projectId, projectInfo);
+            project.updateProject(rmProject.getName(), rmProject.getDescription());
+
+            ServletAppUtils.getServletApplication().getEventController().addEvent(
+                WSProjectUpdateEvent.update(session.getSessionId(), session.getUserId(), rmProject.getId(), projectInfo)
+            );
+            return project.getRMProject();
+        } catch (DBException e) {
+            throw new DBWebException("Error updating project", e);
         }
     }
 
@@ -276,7 +305,7 @@ public class WebServiceRM implements DBWServiceRM {
             }
             getResourceController(session).deleteProject(projectId);
             session.removeSessionProject(projectId);
-            WebAppUtils.getWebApplication().getEventController().addEvent(
+            ServletAppUtils.getServletApplication().getEventController().addEvent(
                 WSProjectUpdateEvent.delete(session.getSessionId(), session.getUserId(), projectId)
             );
             return true;
@@ -374,6 +403,13 @@ public class WebServiceRM implements DBWServiceRM {
                 new HashSet<>(subjectIds),
                 new HashSet<>(permissions)
             );
+            log.info("Project permissions deleted: [projectIds=%s, subjectIds=%s, permissions=%s, madeBy=%s]"
+                .formatted(
+                    String.join(",", projectIds),
+                    String.join(",", subjectIds),
+                    String.join(",", permissions),
+                    webSession.getUserId()
+                ));
             return true;
         } catch (Exception e) {
             throw new DBWebException("Error deleting project permissions", e);
@@ -396,6 +432,13 @@ public class WebServiceRM implements DBWServiceRM {
                 new HashSet<>(permissions),
                 webSession.getUserId()
             );
+            log.info("Project permissions added: [projectIds=%s, subjectIds=%s, permissions=%s, madeBy=%s]"
+                .formatted(
+                    String.join(",", projectIds),
+                    String.join(",", subjectIds),
+                    String.join(",", permissions),
+                    webSession.getUserId()
+                ));
             return true;
         } catch (Exception e) {
             throw new DBWebException("Error adding project permissions", e);
@@ -423,6 +466,72 @@ public class WebServiceRM implements DBWServiceRM {
             return sm.getSubjectObjectPermissionGrants(subjectId, SMObjectType.project);
         } catch (DBException e) {
             throw new DBWebException("Error reading project permission grants", e);
+        }
+    }
+
+    @NotNull
+    @Override
+    public Map<String, Object> getProjectSettings(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @Nullable String settingId
+    ) throws DBWebException {
+        try {
+            var project = webSession.getProjectById(projectId);
+            if (project == null) {
+                throw new DBWebException("Project '" + projectId + "' not found");
+            }
+            return webSession.getSecurityController().getObjectSettings(
+                projectId,
+                SMObjectType.project,
+                settingId
+            );
+        } catch (DBException e) {
+            throw new DBWebException("Error getting project settings", e);
+        }
+    }
+
+    @Override
+    public boolean addProjectSettings(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @NotNull Map<String, Object> settings
+    ) throws DBWebException {
+        try {
+            var project = webSession.getProjectById(projectId);
+            if (project == null) {
+                throw new DBWebException("Project '" + projectId + "' not found");
+            }
+            webSession.getSecurityController().setObjectSettings(
+                projectId,
+                SMObjectType.project,
+                settings
+            );
+            return true;
+        } catch (DBException e) {
+            throw new DBWebException("Error adding object settings", e);
+        }
+    }
+
+    @Override
+    public boolean deleteProjectSettings(
+        @NotNull WebSession webSession,
+        @NotNull String projectId,
+        @Nullable List<String> settings
+    ) throws DBWebException {
+        try {
+            var project = webSession.getProjectById(projectId);
+            if (project == null) {
+                throw new DBWebException("Project '" + projectId + "' not found");
+            }
+            webSession.getSecurityController().deleteObjectSettings(
+                projectId,
+                SMObjectType.project,
+                settings == null ? null : new HashSet<>(settings)
+            );
+            return true;
+        } catch (DBException e) {
+            throw new DBWebException("Error deleting object settings", e);
         }
     }
 

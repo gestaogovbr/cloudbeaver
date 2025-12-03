@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,11 +11,12 @@ import { DEFAULT_NAVIGATOR_VIEW_SETTINGS } from '@cloudbeaver/core-connections';
 import { ExecutorInterrupter, type IExecutionContextProvider } from '@cloudbeaver/core-executor';
 import { CachedMapAllKey } from '@cloudbeaver/core-resource';
 import { DefaultNavigatorSettingsResource, PasswordPolicyResource, ProductInfoResource, ServerConfigResource } from '@cloudbeaver/core-root';
-import { FormPart, type IFormState } from '@cloudbeaver/core-ui';
-import { isObjectsEqual } from '@cloudbeaver/core-utils';
+import { FormPart, formValidationContext, type IFormState } from '@cloudbeaver/core-ui';
+import { isIp, isObjectsEqual, isValuesEqual } from '@cloudbeaver/core-utils';
+import { LocalizationService } from '@cloudbeaver/core-localization';
 
 import { MIN_SESSION_EXPIRE_TIME } from './Form/MIN_SESSION_EXPIRE_TIME.js';
-import type { IServerConfigurationFormPartState } from './IServerConfigurationFormPartState.js';
+import { ServerConfigStateSchema, type IServerConfigurationFormPartState } from './IServerConfigurationFormPartState.js';
 
 function DEFAULT_STATE_GETTER(): IServerConfigurationFormPartState {
   return {
@@ -29,14 +30,18 @@ function DEFAULT_STATE_GETTER(): IServerConfigurationFormPartState {
       enabledFeatures: [],
       publicCredentialsSaveEnabled: false,
       resourceManagerEnabled: false,
+      secretManagerEnabled: false,
       serverName: '',
       serverURL: '',
       sessionExpireTime: MIN_SESSION_EXPIRE_TIME * 1000 * 60,
+      forceHttps: true,
+      supportedHosts: '',
     },
     navigatorConfig: { ...DEFAULT_NAVIGATOR_VIEW_SETTINGS },
   };
 }
 
+const SUPPORTED_HOSTS_SPLITTER = '\n';
 export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFormPartState> {
   constructor(
     formState: IFormState<null>,
@@ -47,8 +52,9 @@ export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFo
     private readonly authProvidersResource: AuthProvidersResource,
     private readonly passwordPolicyResource: PasswordPolicyResource,
     private readonly passwordPolicyService: PasswordPolicyService,
+    private readonly localizationService: LocalizationService,
   ) {
-    super(formState, DEFAULT_STATE_GETTER());
+    super(formState, DEFAULT_STATE_GETTER(), ServerConfigStateSchema);
   }
 
   override isOutdated(): boolean {
@@ -63,6 +69,19 @@ export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFo
     data: IFormState<IServerConfigurationFormPartState>,
     contexts: IExecutionContextProvider<IFormState<IServerConfigurationFormPartState>>,
   ) {
+    const validation = contexts.getContext(formValidationContext);
+
+    const supportedHosts = this.state.serverConfig.supportedHosts;
+    const currentHost = window.location.host;
+
+    if (!isIp(window.location.hostname) && supportedHosts.trim() && !supportedHosts.includes(currentHost)) {
+      validation.error(
+        this.localizationService.translate('administration_configuration_wizard_configuration_supported_hosts_warning', undefined, {
+          host: currentHost,
+        }),
+      );
+    }
+
     if (this.administrationScreenService.isConfigurationMode) {
       await this.authProvidersResource.load(CachedMapAllKey);
 
@@ -71,29 +90,12 @@ export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFo
 
         const isNameValid = this.state.serverConfig.adminName && this.state.serverConfig.adminName.length >= ADMIN_USERNAME_MIN_LENGTH;
         const isPasswordValid = this.passwordPolicyService.validatePassword(this.state.serverConfig.adminPassword ?? '');
+        const isPasswordRepeated = isValuesEqual(this.state.serverConfig.adminPassword, this.state.serverConfig.adminPasswordRepeat, null);
 
-        if (!isNameValid || !isPasswordValid.isValid) {
+        if (!isNameValid || !isPasswordValid.isValid || !isPasswordRepeated) {
           ExecutorInterrupter.interrupt(contexts);
         }
       }
-    }
-  }
-
-  protected override format() {
-    if (this.state.serverConfig.adminName) {
-      this.state.serverConfig.adminName = this.state.serverConfig.adminName.trim();
-    }
-
-    if (this.state.serverConfig.adminPassword) {
-      this.state.serverConfig.adminPassword = this.state.serverConfig.adminPassword.trim();
-    }
-
-    if (this.state.serverConfig.serverName) {
-      this.state.serverConfig.serverName = this.state.serverConfig.serverName.trim();
-    }
-
-    if (this.state.serverConfig.serverURL) {
-      this.state.serverConfig.serverURL = this.state.serverConfig.serverURL.trim();
     }
   }
 
@@ -110,7 +112,19 @@ export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFo
       await this.defaultNavigatorSettingsResource.save(this.state.navigatorConfig);
     }
 
-    await this.serverConfigResource.save(this.state.serverConfig);
+    // Exclude adminPasswordRepeat from server payload as it's only for client-side validation
+    const { adminPasswordRepeat, ...serverConfigToSave } = this.state.serverConfig;
+    await this.serverConfigResource.save({
+      ...serverConfigToSave,
+      supportedHosts: Array.from(
+        new Set(
+          this.state.serverConfig.supportedHosts
+            .split(SUPPORTED_HOSTS_SPLITTER)
+            .map(host => host.trim())
+            .filter(Boolean),
+        ),
+      ),
+    });
   }
 
   protected override async loader() {
@@ -147,6 +161,10 @@ export class ServerConfigurationFormPart extends FormPart<IServerConfigurationFo
         anonymousAccessEnabled: config?.anonymousAccessEnabled ?? false,
         enabledFeatures: config?.enabledFeatures ? [...config.enabledFeatures] : [],
         resourceManagerEnabled: config?.resourceManagerEnabled ?? false,
+        secretManagerEnabled: config?.secretManagerEnabled ?? false,
+        supportedHosts: config?.supportedHosts.join(SUPPORTED_HOSTS_SPLITTER) ?? '',
+        forceHttps: config?.forceHttps ?? true,
+        bindSessionToIp: config?.bindSessionToIp,
       },
       navigatorConfig: { ...this.state.navigatorConfig, ...defaultNavigatorSettings },
     });

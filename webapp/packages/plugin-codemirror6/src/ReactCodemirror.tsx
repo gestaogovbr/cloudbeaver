@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,13 @@ import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useS
 
 import { useObjectRef } from '@cloudbeaver/core-blocks';
 
-import { hasInsertProperty } from './hasInsertProperty.js';
 import type { IEditorRef } from './IEditorRef.js';
 import type { IReactCodeMirrorProps } from './IReactCodemirrorProps.js';
 import { type IReactCodemirrorContext, ReactCodemirrorContext } from './ReactCodemirrorContext.js';
 import { useCodemirrorExtensions } from './useCodemirrorExtensions.js';
 import { validateCursorBoundaries } from './validateCursorBoundaries.js';
+import { ReactCodemirrorSearchPanel } from './ReactCodemirrorSearchPanel.js';
+import { hasInsertProperty } from './hasInsertProperty.js';
 
 const External = Annotation.define<boolean>();
 
@@ -41,8 +42,15 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
     ref,
   ) {
     value = value ?? getValue?.();
+    const isInitialScriptOpening = useRef(true);
     const currentExtensions = useRef<Map<Compartment, Extension>>(new Map());
-    const readOnlyFacet = useMemo(() => EditorView.editable.of(!readonly), [readonly]);
+    const readOnlyFacet = useMemo(() => {
+      if (readonly) {
+        return [EditorState.readOnly.of(true), EditorView.editable.of(false), EditorView.contentAttributes.of({ tabIndex: '0' })];
+      }
+
+      return [];
+    }, [readonly]);
     const eventHandlers = useMemo(
       () =>
         EditorView.domEventHandlers({
@@ -60,16 +68,16 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
       if (container) {
         const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
           const remote = update.transactions.some(tr => tr.annotation(External));
+          const selection = update.state.selection.main;
 
           if (update.docChanged && !remote) {
             const doc = update.state.doc;
             const value = doc.toString();
 
-            callbackRef.onChange?.(value, update);
+            callbackRef.onChange?.(value, selection, update);
           }
 
           if (update.selectionSet && !remote) {
-            const selection = update.state.selection.main;
             callbackRef.onCursorChange?.(selection, update);
           }
 
@@ -89,11 +97,13 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
           doc: value,
         });
 
+        const validatedCursor = cursor ? validateCursorBoundaries(cursor, tempState.doc.length) : undefined;
+
         if (incomingValue !== undefined) {
           merge = new MergeView({
             a: {
               doc: value,
-              selection: cursor && validateCursorBoundaries(cursor, tempState.doc.length),
+              selection: validatedCursor,
               extensions: [updateListener, ...effects],
             },
             b: {
@@ -108,16 +118,20 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
           editorView = new EditorView({
             state: EditorState.create({
               doc: value,
-              selection: cursor && validateCursorBoundaries(cursor, tempState.doc.length),
+              selection: validatedCursor,
               extensions: [updateListener, ...effects],
             }),
             parent: container,
           });
         }
 
-        editorView.dispatch({
-          scrollIntoView: true,
-        });
+        if (validatedCursor) {
+          if (validatedCursor.anchor > 0 || validatedCursor.head !== validatedCursor.anchor) {
+            editorView.dispatch({
+              scrollIntoView: true,
+            });
+          }
+        }
 
         if (incomingView) {
           setIncomingView(incomingView);
@@ -193,19 +207,28 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
           }
         }
 
-        if (cursor && isCursorInDoc) {
-          transaction.selection = cursor;
+        if (cursor) {
+          const changed = view.state.selection.main.anchor !== cursor.anchor || view.state.selection.main.head !== cursor.head;
+
+          if (changed && isCursorInDoc) {
+            transaction.selection = cursor;
+          }
         }
 
-        if (hasInsertProperty(transaction.changes) && !transaction.selection) {
+        if (hasInsertProperty(transaction.changes) && !transaction.selection && !isInitialScriptOpening.current) {
           transaction.selection = {
             anchor: transaction.changes.insert?.length ?? 0,
             head: transaction.changes.insert?.length ?? 0,
           };
         }
 
-        if (transaction.changes || transaction.selection) {
-          view.dispatch(transaction);
+        if (transaction.changes) {
+          view.dispatch({ changes: transaction.changes, annotations: transaction.annotations });
+          isInitialScriptOpening.current = false;
+        }
+
+        if (transaction.selection) {
+          view.dispatch({ selection: transaction.selection, annotations: transaction.annotations });
         }
       }
     });
@@ -248,6 +271,7 @@ export const ReactCodemirror = observer<IReactCodeMirrorProps, IEditorRef>(
     return (
       <ReactCodemirrorContext.Provider value={context}>
         <div ref={setContainer} className="ReactCodemirror">
+          <ReactCodemirrorSearchPanel />
           {children}
         </div>
       </ReactCodemirrorContext.Provider>

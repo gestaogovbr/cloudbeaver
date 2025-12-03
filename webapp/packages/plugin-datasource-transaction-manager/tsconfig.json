@@ -1,49 +1,77 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@cloudbeaver/tsconfig/tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/tsconfig.tsbuildinfo",
+    "composite": true
   },
   "references": [
     {
-      "path": "../core-blocks/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/js-helpers"
     },
     {
-      "path": "../core-connections/tsconfig.json"
+      "path": "../core-blocks"
     },
     {
-      "path": "../core-di/tsconfig.json"
+      "path": "../core-cli"
     },
     {
-      "path": "../core-dialogs/tsconfig.json"
+      "path": "../core-connections"
     },
     {
-      "path": "../core-events/tsconfig.json"
+      "path": "../core-di"
     },
     {
-      "path": "../core-executor/tsconfig.json"
+      "path": "../core-dialogs"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../core-events"
     },
     {
-      "path": "../core-settings/tsconfig.json"
+      "path": "../core-executor"
     },
     {
-      "path": "../core-ui/tsconfig.json"
+      "path": "../core-localization"
     },
     {
-      "path": "../core-utils/tsconfig.json"
+      "path": "../core-resource"
     },
     {
-      "path": "../core-view/tsconfig.json"
+      "path": "../core-root"
     },
     {
-      "path": "../plugin-datasource-context-switch/tsconfig.json"
+      "path": "../core-sdk"
     },
     {
-      "path": "../plugin-top-app-bar/tsconfig.json"
+      "path": "../core-settings"
+    },
+    {
+      "path": "../core-ui"
+    },
+    {
+      "path": "../core-utils"
+    },
+    {
+      "path": "../core-view"
+    },
+    {
+      "path": "../plugin-codemirror6"
+    },
+    {
+      "path": "../plugin-data-grid"
+    },
+    {
+      "path": "../plugin-datasource-context-switch"
+    },
+    {
+      "path": "../plugin-sql-editor-new"
+    },
+    {
+      "path": "../plugin-tools-panel"
+    },
+    {
+      "path": "../plugin-top-app-bar"
     }
   ],
   "include": [
@@ -55,7 +83,6 @@
   ],
   "exclude": [
     "**/node_modules",
-    "lib/**/*",
-    "dist/**/*"
+    "lib/**/*"
   ]
 }

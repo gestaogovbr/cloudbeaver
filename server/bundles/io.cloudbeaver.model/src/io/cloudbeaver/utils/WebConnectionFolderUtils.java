@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,6 @@ import io.cloudbeaver.model.WebConnectionFolderInfo;
 import io.cloudbeaver.model.session.WebSession;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPDataSourceFolder;
-import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
-import org.jkiss.dbeaver.model.navigator.DBNLocalFolder;
-import org.jkiss.dbeaver.model.navigator.DBNNode;
-import org.jkiss.dbeaver.model.navigator.DBNProject;
-import org.jkiss.dbeaver.model.navigator.DBNRoot;
 import org.jkiss.utils.CommonUtils;
 
 public class WebConnectionFolderUtils {
@@ -48,20 +43,5 @@ public class WebConnectionFolderUtils {
         if (folderName.contains("/")) {
             throw new DBWebException("Folder name '" + folderName + "' contains illegal characters: /");
         }
-    }
-
-    public static DBPDataSourceFolder getParentFolder(DBNNode folderNode) throws DBWebException {
-        if (folderNode instanceof DBNRoot || folderNode instanceof DBNProject) {
-            return null;
-        } else if (folderNode instanceof DBNLocalFolder) {
-            return ((DBNLocalFolder) folderNode).getFolder();
-        } else {
-            throw new DBWebException("Navigator node '" + folderNode.getNodeUri() + "' is not a folder node");
-        }
-    }
-
-    public static DBPDataSourceFolder createFolder(WebConnectionFolderInfo parentFolder, String newName, DBPDataSourceRegistry registry) throws DBWebException {
-        DBPDataSourceFolder folder = registry.addFolder(parentFolder == null ? null : parentFolder.getDataSourceFolder(), newName);
-        return folder;
     }
 }

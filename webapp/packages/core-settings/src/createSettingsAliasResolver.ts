@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,20 +8,43 @@
 import { type ISyncExecutor, SyncExecutor } from '@cloudbeaver/core-executor';
 import { invertObject, type schema } from '@cloudbeaver/core-utils';
 
-import type { ISettingChangeData, ISettingsSource } from './ISettingsSource.js';
-import type { SettingsProvider } from './SettingsProvider.js';
+import type { ISettingChangeData } from './ISettingsSource.js';
+import type { IEditableSettingsSource } from './IEditableSettingsSource.js';
 
-const DEPRECATED_SETTINGS = new Set();
+export const DEPRECATED_SETTINGS = new Set();
 
 type SettingsMapping<TTarget> = Partial<{
   [key in keyof TTarget]: string;
 }>;
 
-export function createSettingsAliasResolver<TTarget extends schema.SomeZodObject>(
-  source: ISettingsSource,
-  target: SettingsProvider<TTarget>,
+let resolverLock = false;
+
+/**
+ * Executes a function with a lock to prevent concurrent access.
+ * If the lock is already acquired, it passes `true` to the function.
+ * Otherwise, it acquires the lock, executes the function, and then releases the lock.
+ *
+ * We use this function to verify that the source doesn't have original keys
+ *
+ * @param fn The function to execute with the lock status.
+ * @returns The result of the function execution.
+ */
+function withLock<T>(fn: (locked: boolean) => T): T {
+  if (resolverLock) {
+    return fn(true);
+  }
+  try {
+    resolverLock = true;
+    return fn(false);
+  } finally {
+    resolverLock = false;
+  }
+}
+
+export function createSettingsAliasResolver<TTarget extends schema.ZodObject>(
+  source: IEditableSettingsSource,
   mappings: SettingsMapping<schema.infer<TTarget>>,
-): ISettingsSource {
+): IEditableSettingsSource {
   type targetSchema = schema.infer<TTarget>;
   const reversed = invertObject(mappings);
 
@@ -39,20 +62,6 @@ export function createSettingsAliasResolver<TTarget extends schema.SomeZodObject
     data => ({ ...data, key: reverseMapKey(data.key) }),
     data => data.key in reversed,
   );
-
-  let resolverLock = false;
-
-  function withLock<T>(fn: (locked: boolean) => T): T {
-    if (resolverLock) {
-      return fn(true);
-    }
-    try {
-      resolverLock = true;
-      return fn(false);
-    } finally {
-      resolverLock = false;
-    }
-  }
 
   return {
     onChange,
@@ -76,6 +85,7 @@ export function createSettingsAliasResolver<TTarget extends schema.SomeZodObject
 
       return has;
     },
+    isOverrideDefaults: source.isOverrideDefaults?.bind(source.isOverrideDefaults),
     isEdited(key) {
       if (!(key in mappings)) {
         return false;
@@ -108,6 +118,16 @@ export function createSettingsAliasResolver<TTarget extends schema.SomeZodObject
       withLock(locked => {
         if (!locked) {
           source.setValue(key, value);
+        }
+      });
+    },
+    resetValue(key) {
+      if (!(key in mappings)) {
+        return;
+      }
+      withLock(locked => {
+        if (!locked) {
+          source.resetValue(key);
         }
       });
     },

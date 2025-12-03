@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,14 +8,15 @@
 import { injectable } from '@cloudbeaver/core-di';
 import { TaskScheduler } from '@cloudbeaver/core-executor';
 import { CachedMapAllKey, ResourceKeyUtils } from '@cloudbeaver/core-resource';
-import { AsyncTaskInfoService, GraphQLService } from '@cloudbeaver/core-sdk';
+import { AsyncTaskInfoService } from '@cloudbeaver/core-root';
+import { GraphQLService } from '@cloudbeaver/core-sdk';
 import { MetadataMap } from '@cloudbeaver/core-utils';
 
 import type { IConnectionInfoParams } from '../CONNECTION_INFO_PARAM_SCHEMA.js';
 import { ConnectionExecutionContext } from './ConnectionExecutionContext.js';
 import { ConnectionExecutionContextResource } from './ConnectionExecutionContextResource.js';
 
-@injectable()
+@injectable(() => [ConnectionExecutionContextResource, AsyncTaskInfoService, GraphQLService])
 export class ConnectionExecutionContextService {
   private readonly contexts: MetadataMap<string, ConnectionExecutionContext>;
   protected scheduler: TaskScheduler<string>;

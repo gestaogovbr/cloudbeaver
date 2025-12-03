@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['table_header_sql_expression_not_supported', 'Datenfilter wird nicht unterstützt'],
   ['data_viewer_tab_title', 'Daten'],
@@ -23,7 +16,7 @@ export default [
   ['data_viewer_action_auto_refresh_menu_stop_tooltip', 'Stop auto-refreshing data'],
   ['data_viewer_action_auto_refresh_menu_configure_tooltip', 'Configure auto-refresh settings'],
   ['data_viewer_action_auto_refresh_interval_tooltip', 'Set auto-refresh interval to {arg:interval}'],
-  ['data_viewer_action_edit_delete', 'Ausgewählte löschen'],
+  ['data_viewer_action_edit_delete', 'Ausgewählte Zeilen löschen'],
   ['data_viewer_action_edit_add', 'Hinzufügen'],
   ['data_viewer_action_edit_add_copy', 'Duplikat'],
   ['data_viewer_action_edit_revert', 'Ausgewählt abbrechen'],
@@ -45,12 +38,6 @@ export default [
   ['data_viewer_copy_not_allowed', 'An ability to copy data is disabled'],
   ['data_viewer_copy_not_allowed_message', 'If this was unexpected, contact the administrator'],
   ['settings_data_editor', 'Dateneditor'],
-  ['settings_data_editor_disable_edit_name', 'Bearbeiten deaktivieren'],
-  ['settings_data_editor_disable_edit_description', 'Deaktivieren Sie die Bearbeitung von Daten in Data Viewer für Nicht-Admin-Benutzer'],
-  ['settings_data_editor_disable_data_copy_name', 'Kopie deaktivieren'],
-  ['settings_data_editor_disable_data_copy_description', 'Deaktivieren Sie das Kopieren von Daten in Data Viewer für Nicht-Admin-Benutzer'],
-  ['settings_data_editor_disable_data_export_name', 'Disable Export'],
-  ['settings_data_editor_disable_data_export_description', 'Disable exporting of data in Data Viewer for non-admin users'],
   ['settings_data_editor_fetch_max_name', 'Maximale fetch size'],
   ['settings_data_editor_fetch_max_description', 'Maximale Anzahl von Zeilen zum Abrufen'],
   ['settings_data_editor_fetch_default_name', 'Standard fetch size'],

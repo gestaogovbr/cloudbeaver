@@ -1,11 +1,12 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-export * from './manifest.js';
+
+import './module.js';
 
 export * from './DatabaseDataModel/Actions/Document/DocumentDataAction.js';
 export * from './DatabaseDataModel/Actions/Document/DocumentEditAction.js';
@@ -15,36 +16,40 @@ export * from './DatabaseDataModel/Actions/ResultSet/DataContext/DATA_CONTEXT_DV
 export * from './DatabaseDataModel/DataContext/DATA_CONTEXT_DV_PRESENTATION.js';
 export * from './DatabaseDataModel/DataContext/DATA_CONTEXT_DV_DDM.js';
 export * from './DatabaseDataModel/DataContext/DATA_CONTEXT_DV_DDM_RESULT_INDEX.js';
-export * from './DatabaseDataModel/Actions/ResultSet/compareResultSetRowKeys.js';
+export * from './TableViewer/DATA_CONTEXT_DV_SIMPLE.js';
+export * from './DatabaseDataModel/Actions/ResultSet/DATA_CONTEXT_DV_RESULT_KEY.js';
+export * from './TableViewer/DATA_CONTEXT_DV_ACTIONS.js';
+export * from './TableViewer/DATA_CONTEXT_DV_PRESENTATION_ACTIONS.js';
 export * from './DatabaseDataModel/Actions/ResultSet/createResultSetBlobValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/createResultSetContentValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/createResultSetFileValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/IResultSetDataKey.js';
 export * from './DatabaseDataModel/Actions/ResultSet/IResultSetBlobValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/IResultSetComplexValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/IResultSetFileValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/IResultSetContentValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/IResultSetGeometryValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/IResultSetBinaryValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/isResultSetBinaryValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/isResultSetBlobValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/isResultSetComplexValue.js';
-export * from './DatabaseDataModel/Actions/ResultSet/isResultSetContentValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/isResultSetFileValue.js';
 export * from './DatabaseDataModel/Actions/ResultSet/isResultSetGeometryValue.js';
 export * from './DatabaseDataModel/Actions/DatabaseDataConstraintAction.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetDataAction.js';
-export * from './DatabaseDataModel/Actions/ResultSet/ResultSetDataKeysUtils.js';
+export * from './DatabaseDataModel/Actions/Grid/GridDataKeysUtils.js';
+export * from './DatabaseDataModel/Actions/Grid/GridDataResultAction.js';
+export * from './DatabaseDataModel/Actions/IDatabaseValueHolder.js';
+export * from './DatabaseDataModel/Actions/Grid/GridEditAction.js';
+export * from './DatabaseDataModel/Actions/Grid/GridViewAction.js';
+export * from './DatabaseDataModel/Actions/Grid/IGridDataKey.js';
+export * from './DatabaseDataModel/Actions/Grid/GridSelectAction.js';
+export * from './DatabaseDataModel/Actions/Grid/compareGridRowKeys.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetEditAction.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetFormatAction.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetSelectAction.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetViewAction.js';
 export * from './DatabaseDataModel/Actions/ResultSet/ResultSetDataContentAction.js';
-export * from './DatabaseDataModel/Actions/DatabaseDataActionDecorator.js';
 export * from './DatabaseDataModel/Actions/DatabaseDataResultAction.js';
 export * from './DatabaseDataModel/Actions/DatabaseEditAction.js';
-export * from './DatabaseDataModel/Actions/DatabaseMetadataAction.js';
+export * from './DatabaseDataModel/Actions/General/DatabaseMetadataAction.js';
 export * from './DatabaseDataModel/Actions/DatabaseSelectAction.js';
+export * from './DatabaseDataModel/Actions/IDatabaseDataCacheAction.js';
+export * from './DatabaseDataModel/Actions/IDatabaseDataViewAction.js';
 export * from './DatabaseDataModel/Actions/IDatabaseDataConstraintAction.js';
 export * from './DatabaseDataModel/Actions/IDatabaseDataEditAction.js';
 export * from './DatabaseDataModel/Actions/IDatabaseDataFormatAction.js';
@@ -79,6 +84,7 @@ export * from './TableViewer/IDataPresentationActions.js';
 export * from './TableViewer/TableViewerLoader.js';
 export * from './TableViewer/TableFooter/TableFooterMenu/DATA_VIEWER_DATA_MODEL_ACTIONS_MENU.js';
 export * from './TableViewer/TableFooter/TableFooterMenu/TableFooterMenuService.js';
+export * from './TableViewer/TableHeader/TableHeaderService.js';
 
 export * from './ContainerDataSource.js';
 export * from './ResultSet/ResultSetDataSource.js';
@@ -89,3 +95,4 @@ export * from './ValuePanelPresentation/BooleanValue/isBooleanValuePresentationA
 export * from './useDataViewerCopyHandler.js';
 export * from './DataViewerSettingsService.js';
 export * from './DATA_EDITOR_SETTINGS_GROUP.js';
+export * from './MENU_DV_CONTEXT_MENU.js';

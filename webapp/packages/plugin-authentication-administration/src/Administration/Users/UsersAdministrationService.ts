@@ -1,18 +1,19 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import React from 'react';
 
-import { AdministrationItemService } from '@cloudbeaver/core-administration';
+import { AdministrationItemService, type IAdministrationItem } from '@cloudbeaver/core-administration';
 import { type AdminUser, TeamsResource, UsersResource } from '@cloudbeaver/core-authentication';
 import { PlaceholderContainer } from '@cloudbeaver/core-blocks';
 import { Bootstrap, injectable } from '@cloudbeaver/core-di';
+import { TabsContainer } from '@cloudbeaver/core-ui';
 
-import { CreateTeamService } from './Teams/CreateTeamService.js';
+import { CreateTeamService } from './Teams/TeamsTable/CreateTeamService.js';
 import { EUsersAdministrationSub, UsersAdministrationNavigationService } from './UsersAdministrationNavigationService.js';
 import { CreateUserService } from './UsersTable/CreateUserService.js';
 
@@ -35,9 +36,11 @@ export interface IUserDetailsInfoProps {
   user: AdminUser;
 }
 
-@injectable()
+@injectable(() => [AdministrationItemService, CreateUserService, TeamsResource, CreateTeamService, UsersResource])
 export class UsersAdministrationService extends Bootstrap {
-  readonly userDetailsInfoPlaceholder = new PlaceholderContainer<IUserDetailsInfoProps>();
+  readonly tabsContainer: TabsContainer;
+  readonly userDetailsInfoPlaceholder: PlaceholderContainer<IUserDetailsInfoProps>;
+  administrationItem!: IAdministrationItem;
 
   constructor(
     private readonly administrationItemService: AdministrationItemService,
@@ -47,10 +50,12 @@ export class UsersAdministrationService extends Bootstrap {
     private readonly usersResource: UsersResource,
   ) {
     super();
+    this.userDetailsInfoPlaceholder = new PlaceholderContainer();
+    this.tabsContainer = new TabsContainer('Access Control');
   }
 
-  override register() {
-    this.administrationItemService.create({
+  override register(): void {
+    this.administrationItem = this.administrationItemService.create({
       name: UsersAdministrationNavigationService.ItemName,
       order: 4,
       sub: [
@@ -59,16 +64,12 @@ export class UsersAdministrationService extends Bootstrap {
         },
         {
           name: EUsersAdministrationSub.Users,
-          onDeActivate: this.cancelCreate.bind(this),
+          onDeActivate: this.cancelUserCreate.bind(this),
         },
         {
           name: EUsersAdministrationSub.Teams,
           onActivate: this.loadTeams.bind(this),
-          onDeActivate: (param, configurationWizard, outside) => {
-            if (outside) {
-              this.teamsResource.cleanNewFlags();
-            }
-          },
+          onDeActivate: this.cancelTeamCreate.bind(this),
         },
       ],
       defaultSub: EUsersAdministrationSub.Users,
@@ -78,7 +79,7 @@ export class UsersAdministrationService extends Bootstrap {
     this.userDetailsInfoPlaceholder.add(UserCredentialsList, 0);
   }
 
-  private async cancelCreate(param: string | null, configurationWizard: boolean, outside: boolean) {
+  private cancelUserCreate(param: string | null, configurationWizard: boolean, outside: boolean) {
     if (param === 'create') {
       this.createUserService.close();
     }
@@ -88,7 +89,17 @@ export class UsersAdministrationService extends Bootstrap {
     }
   }
 
-  private async loadTeams(param: string | null) {
+  private cancelTeamCreate(param: string | null, configurationWizard: boolean, outside: boolean) {
+    if (param === 'create') {
+      this.createTeamService.dispose();
+    }
+
+    if (outside) {
+      this.teamsResource.cleanNewFlags();
+    }
+  }
+
+  private loadTeams(param: string | null) {
     if (param === 'create') {
       this.createTeamService.fillData();
     }

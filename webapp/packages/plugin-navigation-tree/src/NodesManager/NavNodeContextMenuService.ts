@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import {
   ENodeFeature,
   getNodePlainName,
   type INodeActions,
-  NAV_NODE_TYPE_FOLDER,
+  isConnectionFolder,
   type NavNode,
   NavNodeInfoResource,
   NavNodeManagerService,
@@ -38,13 +38,24 @@ import {
 } from '@cloudbeaver/core-view';
 
 import { DATA_CONTEXT_NAV_NODE_ACTIONS } from '../NavigationTree/ElementsTree/NavigationTreeNode/TreeNodeMenu/DATA_CONTEXT_NAV_NODE_ACTIONS.js';
+import { MENU_NAVIGATION_TREE_CREATE } from '../NavigationTree/ElementsTree/NavigationTreeNode/TreeNodeMenu/MENU_NAVIGATION_TREE_CREATE.js';
 
 export interface INodeMenuData {
   node: NavNode;
   actions?: INodeActions;
 }
 
-@injectable()
+@injectable(() => [
+  NavNodeManagerService,
+  NotificationService,
+  CommonDialogService,
+  NavTreeResource,
+  ActionService,
+  MenuService,
+  LocalizationService,
+  NavNodeInfoResource,
+  NavTreeSettingsService,
+])
 export class NavNodeContextMenuService extends Bootstrap {
   constructor(
     private readonly navNodeManagerService: NavNodeManagerService,
@@ -83,13 +94,13 @@ export class NavNodeContextMenuService extends Bootstrap {
         message = message + '\n' + this.localizationService.translate('app_navigationTree_node_folder_delete_confirmation');
       }
 
-      const result = await this.commonDialogService.open(ConfirmationDialogDelete, {
+      const { status } = await this.commonDialogService.open(ConfirmationDialogDelete, {
         title: 'ui_data_delete_confirmation',
         message,
         confirmActionText: 'ui_delete',
       });
 
-      if (result === DialogueStateResult.Rejected) {
+      if (status === DialogueStateResult.Rejected) {
         ExecutorInterrupter.interrupt(contexts);
       }
     });
@@ -100,7 +111,7 @@ export class NavNodeContextMenuService extends Bootstrap {
       isActionApplicable: (context, action): boolean => {
         const node = context.get(DATA_CONTEXT_NAV_NODE)!;
 
-        if (NodeManagerUtils.isDatabaseObject(node.id) || node.nodeType === NAV_NODE_TYPE_FOLDER) {
+        if (NodeManagerUtils.isDatabaseObject(node.id) || isConnectionFolder(node)) {
           if (action === ACTION_RENAME) {
             return node.features?.includes(ENodeFeature.canRename) ?? false;
           }
@@ -151,7 +162,7 @@ export class NavNodeContextMenuService extends Bootstrap {
             if (actions?.rename) {
               actions.rename(save);
             } else {
-              const result = await this.commonDialogService.open(RenameDialog, {
+              const { status, result } = await this.commonDialogService.open(RenameDialog, {
                 name,
                 subTitle: name,
                 objectName: node.nodeType || 'Object',
@@ -159,7 +170,7 @@ export class NavNodeContextMenuService extends Bootstrap {
                 validation: name => name.trim().length > 0,
               });
 
-              if (result !== DialogueStateResult.Rejected && result !== DialogueStateResult.Resolved) {
+              if (status === DialogueStateResult.Resolved && result !== undefined) {
                 save(result);
               }
             }
@@ -180,11 +191,16 @@ export class NavNodeContextMenuService extends Bootstrap {
       },
     });
 
+    this.menuService.setHandler({
+      id: 'menu-navigation-tree-create',
+      menus: [MENU_NAVIGATION_TREE_CREATE],
+    });
+
     this.menuService.addCreator({
       root: true,
       contexts: [DATA_CONTEXT_NAV_NODE],
       getItems: (context, items) => {
-        items = [ACTION_OPEN, ACTION_REFRESH, ...items];
+        items = [MENU_NAVIGATION_TREE_CREATE, ACTION_OPEN, ACTION_REFRESH, ...items];
 
         if (this.navTreeSettingsService.editing) {
           items.push(ACTION_RENAME);

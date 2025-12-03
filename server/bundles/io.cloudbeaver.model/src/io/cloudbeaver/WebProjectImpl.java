@@ -27,6 +27,7 @@ import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
 import org.jkiss.dbeaver.model.rm.RMController;
 import org.jkiss.dbeaver.model.rm.RMProject;
 import org.jkiss.dbeaver.model.task.DBTTaskManager;
+import org.jkiss.dbeaver.registry.DataSourceRegistry;
 import org.jkiss.dbeaver.registry.rm.DataSourceRegistryRM;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 
@@ -83,15 +84,12 @@ public abstract class WebProjectImpl extends BaseWebProjectImpl {
     @NotNull
     @Override
     protected DBPDataSourceRegistry createDataSourceRegistry() {
-        return new WebDataSourceRegistryProxy(
-            new DataSourceRegistryRM(this, getResourceController(), preferenceStore),
-            getDataSourceFilter()
-        );
+        return createRMRegistry();
     }
 
     @NotNull
-    public DataSourceFilter getDataSourceFilter() {
-        return (ds) -> true;
+    protected DataSourceRegistry<?> createRMRegistry() {
+        return new DataSourceRegistryRM<>(this, getResourceController(), preferenceStore);
     }
 
 }

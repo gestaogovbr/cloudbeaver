@@ -1,13 +1,14 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import type { IDataContextProvider } from '@cloudbeaver/core-data-context';
 import { injectable } from '@cloudbeaver/core-di';
-import { flat, type ILoadableState, isNotNullDefined } from '@cloudbeaver/core-utils';
+import { flat, type ILoadableState } from '@cloudbeaver/core-utils';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
 
 import { ActionService } from '../Action/ActionService.js';
 import { isAction } from '../Action/createAction.js';
@@ -22,7 +23,7 @@ import type { IMenuItem } from './MenuItem/IMenuItem.js';
 import { MenuActionItem } from './MenuItem/MenuActionItem.js';
 import { MenuSubMenuItem } from './MenuItem/MenuSubMenuItem.js';
 
-@injectable()
+@injectable(() => [ActionService])
 export class MenuService {
   private readonly handlers: Map<string, IMenuHandler<any>>;
   private readonly creators: IMenuItemsCreator[];
@@ -133,8 +134,7 @@ export class MenuService {
         if (isMenu(item)) {
           return new MenuSubMenuItem({
             menu: item,
-            action: (isAction(item.action) ? this.createActionItem(context, item.action) : undefined) || undefined,
-          }) as IMenuItem;
+          });
         }
         return item;
       })

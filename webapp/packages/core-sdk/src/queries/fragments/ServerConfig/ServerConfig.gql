@@ -12,11 +12,13 @@ fragment ServerConfig on ServerConfig {
   sessionExpireTime
 
   anonymousAccessEnabled
+  bindSessionToIp
 
   adminCredentialsSaveEnabled
   publicCredentialsSaveEnabled
 
   resourceManagerEnabled
+  secretManagerEnabled
 
   configurationMode
   developmentMode
@@ -32,4 +34,6 @@ fragment ServerConfig on ServerConfig {
     nativeName
   }
   disabledDrivers
+  forceHttps
+  supportedHosts
 }

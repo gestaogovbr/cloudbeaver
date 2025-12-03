@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,26 @@ import { ESqlDataSourceFeatures } from './ESqlDataSourceFeatures.js';
 import type { ISetScriptData, ISqlDataSource, ISqlDataSourceKey, ISqlEditorCursor } from './ISqlDataSource.js';
 import type { ISqlDataSourceHistory } from './SqlDataSourceHistory/ISqlDataSourceHistory.js';
 import { SqlDataSourceHistory } from './SqlDataSourceHistory/SqlDataSourceHistory.js';
+import type { TLocalizationToken } from '@cloudbeaver/core-localization';
 
 const SOURCE_HISTORY = 'history';
 
 @staticImplements<ISqlDataSourceKey>()
-export abstract class BaseSqlDataSource implements ISqlDataSource {
+export abstract class BaseSqlDataSource<TDataSource extends QueryDataSource = QueryDataSource> implements ISqlDataSource<TDataSource> {
   static key = 'base';
 
   abstract get name(): string | null;
-  message?: string;
+  get message(): TLocalizationToken | undefined {
+    return undefined;
+  }
+  loadingMessage?: TLocalizationToken;
 
   abstract get script(): string;
   abstract get baseScript(): string;
 
-  abstract get baseExecutionContext(): IConnectionExecutionContextInfo | undefined;
   abstract get executionContext(): IConnectionExecutionContextInfo | undefined;
-  databaseModels: IDatabaseDataModel<QueryDataSource>[];
+  abstract get baseExecutionContext(): IConnectionExecutionContextInfo | undefined;
+  databaseModels: IDatabaseDataModel<TDataSource>[];
   incomingScript: string | undefined;
   incomingExecutionContext: IConnectionExecutionContextInfo | undefined | null;
   exception?: Error | Error[] | null | undefined;
@@ -73,15 +77,15 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
     return this.executionContext?.projectId ?? null;
   }
 
-  get features(): ESqlDataSourceFeatures[] {
-    return [ESqlDataSourceFeatures.script, ESqlDataSourceFeatures.query, ESqlDataSourceFeatures.executable];
-  }
-
   readonly icon: string;
   readonly history: ISqlDataSourceHistory;
   readonly onUpdate: ISyncExecutor;
   readonly onSetScript: ISyncExecutor<ISetScriptData>;
-  readonly onDatabaseModelUpdate: ISyncExecutor<IDatabaseDataModel<QueryDataSource>[]>;
+  readonly onDatabaseModelUpdate: ISyncExecutor<IDatabaseDataModel<TDataSource>[]>;
+
+  protected get features(): ESqlDataSourceFeatures[] {
+    return [ESqlDataSourceFeatures.script, ESqlDataSourceFeatures.query, ESqlDataSourceFeatures.executable];
+  }
 
   protected outdated: boolean;
   protected editing: boolean;
@@ -93,10 +97,10 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
     this.incomingScript = undefined;
     this.incomingExecutionContext = null;
     this.exception = undefined;
-    this.message = undefined;
+    this.loadingMessage = undefined;
     this.outdated = true;
     this.editing = true;
-    this.innerCursorState = { begin: 0, end: 0 };
+    this.innerCursorState = { anchor: 0, head: 0 };
     this.history = new SqlDataSourceHistory();
     this.onUpdate = new SyncExecutor();
     this.onSetScript = new SyncExecutor();
@@ -104,14 +108,24 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
 
     this.onDatabaseModelUpdate.setInitialDataGetter(() => this.databaseModels);
     this.onSetScript.next(this.onUpdate);
-    this.onSetScript.addHandler(({ script, source }) => {
-      if (source === SOURCE_HISTORY) {
-        return;
-      }
-      this.history.add(script);
-    });
+    this.onSetScript.addHandler(
+      action(({ script, source, cursor }) => {
+        if (source === SOURCE_HISTORY) {
+          return;
+        }
+        this.history.add(script, source, cursor);
+      }),
+    );
 
-    this.history.onNavigate.addHandler(value => this.setScript(value, SOURCE_HISTORY));
+    this.history.onNavigate.addHandler(
+      action(({ value, cursor }) => {
+        this.setScript(value, SOURCE_HISTORY);
+
+        if (cursor) {
+          this.setCursor(cursor.anchor, cursor.head);
+        }
+      }),
+    );
 
     makeObservable<this, 'outdated' | 'editing' | 'innerCursorState'>(this, {
       isSaved: computed,
@@ -134,7 +148,8 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
       databaseModels: observable.ref,
       exception: observable.ref,
       outdated: observable.ref,
-      message: observable.ref,
+      message: computed,
+      loadingMessage: observable.ref,
       editing: observable.ref,
       innerCursorState: observable.ref,
       incomingScript: observable.ref,
@@ -142,19 +157,18 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
     });
   }
 
-  setScript(script: string, source?: string): void {
-    this.onSetScript.execute({ script, source });
+  setScript(script: string, source?: string, cursor?: ISqlEditorCursor): void {
+    if (cursor) {
+      this.setInnerCursorState(cursor);
+    }
+    this.onSetScript.execute({ script, source, cursor });
   }
 
   setIncomingScript(script: string): void {
     if (script !== this.baseScript) {
-      if (this.script === this.baseScript) {
-        this.setBaseScript(script);
-        this.setScript(script);
-      } else {
-        this.incomingScript = script;
-      }
+      this.incomingScript = script;
     } else {
+      this.setBaseScript(script);
       this.incomingScript = undefined;
     }
   }
@@ -232,16 +246,10 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
     return this.features.includes(feature);
   }
 
-  setCursor(begin: number, end = begin): void {
-    if (begin > end) {
-      throw new Error('Cursor begin can not be greater than the end of it');
-    }
-
-    const scriptLength = this.script.length;
-
-    this.innerCursorState = Object.freeze({
-      begin: Math.min(begin, scriptLength),
-      end: Math.min(end, scriptLength),
+  setCursor(anchor: number, head = anchor): void {
+    this.setInnerCursorState({
+      anchor,
+      head,
     });
     this.onUpdate.execute();
   }
@@ -298,4 +306,12 @@ export abstract class BaseSqlDataSource implements ISqlDataSource {
 
   protected abstract setBaseScript(script: string): void;
   protected abstract setBaseExecutionContext(executionContext: IConnectionExecutionContextInfo | undefined): void;
+  protected setInnerCursorState(cursor: ISqlEditorCursor): void {
+    const scriptLength = this.script.length;
+
+    this.innerCursorState = Object.freeze({
+      anchor: Math.min(cursor.anchor, scriptLength),
+      head: Math.min(cursor.head, scriptLength),
+    });
+  }
 }

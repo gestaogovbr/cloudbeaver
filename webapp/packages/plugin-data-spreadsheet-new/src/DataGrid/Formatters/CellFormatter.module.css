@@ -10,16 +10,19 @@
   display: flex;
   overflow: hidden;
   box-sizing: border-box;
+  gap: 6px;
+  height: 100%;
 }
 
 .container {
   flex: 1;
   overflow: hidden;
+  display: flex;
+  align-items: center;
 }
 
 .menuContainer {
-  width: 25px;
-  height: 100%;
+  display: flex;
   box-sizing: border-box;
   overflow: hidden;
 

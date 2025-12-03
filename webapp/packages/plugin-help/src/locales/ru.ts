@@ -1,6 +1,9 @@
 export default [
   ['shortcuts_title', 'Горячие клавиши'],
 
+  ['plugin_help_welcome_docs_label', 'Документация'],
+  ['plugin_help_welcome_docs_description', 'Узнайте как использовать {arg:product}'],
+
   ['data_viewer_shortcut_start_inline_editing', 'Начать редактирование ячейки во встроенном редакторе'],
   ['data_viewer_shortcut_add_new_row', 'Добавить новую строку'],
   ['data_viewer_shortcut_duplicate_row', 'Продублировать строку'],
@@ -15,8 +18,8 @@ export default [
   ['sql_editor_shortcut_show_execution_plan', 'Показать план выполнения'],
   ['sql_editor_shortcut_format', 'Форматировать скрипт'],
   ['sql_editor_shortcut_open_editor_in_new_tab', 'Открыть SQL редактор в новой бразуерной вкладке'],
-  ['sql_editor_shortcut_undo', 'Отменить'],
-  ['sql_editor_shortcut_redo', 'Повторить'],
+  ['sql_editor_shortcut_find', 'Найти'],
+  ['sql_editor_shortcut_comment_uncomment_selection', 'Закомментировать/раскомментировать выделение'],
 
   ['navigation_tree_shortcut_enable_filter', 'Включить фильтрацию'],
 ];

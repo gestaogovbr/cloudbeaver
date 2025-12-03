@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
  */
 package io.cloudbeaver.model;
 
-import io.cloudbeaver.model.config.PasswordPolicyConfiguration;
+import io.cloudbeaver.registry.WebServerFeatureRegistry;
 import io.cloudbeaver.registry.WebServiceDescriptor;
 import io.cloudbeaver.registry.WebServiceRegistry;
-import io.cloudbeaver.server.CBApplication;
-import io.cloudbeaver.server.CBPlatform;
+import io.cloudbeaver.server.WebApplication;
+import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.navigator.DBNBrowseSettings;
@@ -31,6 +31,7 @@ import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -39,9 +40,10 @@ import java.util.Map;
  */
 public class WebServerConfig {
 
-    private final CBApplication application;
+    private final WebApplication application;
+    protected boolean provideSensitiveInformation = true;
 
-    public WebServerConfig(CBApplication application) {
+    public WebServerConfig(@NotNull WebApplication application) {
         this.application = application;
     }
 
@@ -61,27 +63,6 @@ public class WebServerConfig {
     }
 
     @Property
-    public String getServerURL() {
-        return CommonUtils.notEmpty(application.getServerConfiguration().getServerURL());
-    }
-
-    @Property
-    public String getRootURI() {
-        return CommonUtils.notEmpty(application.getServerConfiguration().getRootURI());
-    }
-
-    @Deprecated
-    @Property
-    public String getHostName() {
-        return getContainerId();
-    }
-
-    @Property
-    public String getContainerId() {
-        return CommonUtils.notEmpty(application.getContainerId());
-    }
-
-    @Property
     public boolean isAnonymousAccessEnabled() {
         return application.getAppConfiguration().isAnonymousAccessEnabled();
     }
@@ -89,16 +70,6 @@ public class WebServerConfig {
     @Property
     public boolean isSupportsCustomConnections() {
         return application.getAppConfiguration().isSupportsCustomConnections();
-    }
-
-    @Property
-    public boolean isSupportsConnectionBrowser() {
-        return application.getAppConfiguration().isSupportsConnectionBrowser();
-    }
-
-    @Property
-    public boolean isSupportsWorkspaces() {
-        return application.getAppConfiguration().isSupportsUserWorkspaces();
     }
 
     @Property
@@ -123,7 +94,7 @@ public class WebServerConfig {
 
     @Property
     public String getLicenseStatus() {
-        return application.getLicenseStatus();
+        return provideSensitiveInformation ? application.getLicenseStatus() : "";
     }
 
     @Property
@@ -137,23 +108,13 @@ public class WebServerConfig {
     }
 
     @Property
-    public boolean isRedirectOnFederatedAuth() {
-        return application.getAppConfiguration().isRedirectOnFederatedAuth();
-    }
-
-    @Property
     public boolean isResourceManagerEnabled() {
         return application.getAppConfiguration().isResourceManagerEnabled();
     }
 
     @Property
-    public long getSessionExpireTime() {
-        return application.getServerConfiguration().getMaxSessionIdleTime();
-    }
-
-    @Property
-    public String getLocalHostAddress() {
-        return application.getLocalHostAddress();
+    public boolean isSecretManagerEnabled() {
+        return application.getAppConfiguration().isSecretManagerEnabled();
     }
 
     @Property
@@ -168,13 +129,16 @@ public class WebServerConfig {
     }
 
     @Property
-    public String[] getEnabledAuthProviders() {
-        return application.getAppConfiguration().getEnabledAuthProviders();
+    @NotNull
+    public String[] getServerFeatures() {
+        return WebServerFeatureRegistry.getInstance().getServerFeatures();
     }
 
     @Property
     public WebServerLanguage[] getSupportedLanguages() {
-        List<PlatformLanguageDescriptor> langs = PlatformLanguageRegistry.getInstance().getLanguages();
+        List<PlatformLanguageDescriptor> langs = new ArrayList<>(PlatformLanguageRegistry.getInstance().getLanguages());
+        // FIXME: remove hardcoded ordering
+        langs.sort(Comparator.comparingInt(x -> x.getCode().equals("vi") ? 1 : -1));
         WebServerLanguage[] webLangs = new WebServerLanguage[langs.size()];
         for (int i = 0; i < webLangs.length; i++) {
             webLangs[i] = new WebServerLanguage(langs.get(i));
@@ -193,7 +157,7 @@ public class WebServerConfig {
 
     @Property
     public Map<String, Object> getProductConfiguration() {
-        return CBPlatform.getInstance().getApplication().getProductConfiguration();
+        return application.getProductConfiguration();
     }
 
     @Property
@@ -208,7 +172,7 @@ public class WebServerConfig {
 
     @Property
     public WebProductInfo getProductInfo() {
-        return new WebProductInfo();
+        return new WebProductInfo(provideSensitiveInformation);
     }
 
     @Property
@@ -221,18 +185,7 @@ public class WebServerConfig {
         return application.isDistributed();
     }
 
-    @Property
-    public String getDefaultAuthRole() {
-        return application.getDefaultAuthRole();
-    }
-
-    @Property
-    public String getDefaultUserTeam() {
-        return application.getAppConfiguration().getDefaultUserTeam();
-    }
-
-    @Property
-    public PasswordPolicyConfiguration getPasswordPolicyConfiguration() {
-        return application.getSecurityManagerConfiguration().getPasswordPolicyConfiguration();
+    public void setProvideSensitiveInformation(boolean provideSensitiveInformation) {
+        this.provideSensitiveInformation = provideSensitiveInformation;
     }
 }

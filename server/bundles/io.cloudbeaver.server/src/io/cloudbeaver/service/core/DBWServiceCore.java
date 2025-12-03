@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
  */
 package io.cloudbeaver.service.core;
 
-import io.cloudbeaver.DBWebException;
-import io.cloudbeaver.WebAction;
-import io.cloudbeaver.WebObjectId;
-import io.cloudbeaver.WebProjectAction;
+import io.cloudbeaver.*;
 import io.cloudbeaver.model.*;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.service.DBWService;
@@ -29,6 +26,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.navigator.DBNBrowseSettings;
 import org.jkiss.dbeaver.model.rm.RMConstants;
+import org.jkiss.dbeaver.registry.settings.ProductSettingDescriptor;
 
 import java.util.List;
 import java.util.Map;
@@ -39,10 +37,16 @@ import java.util.Map;
 public interface DBWServiceCore extends DBWService {
 
     @WebAction(authRequired = false, initializationRequired = false)
-    WebServerConfig getServerConfig() throws DBWebException;
+    WebServerConfig getServerConfig(@Nullable WebSession webSession) throws DBWebException;
 
-    @WebAction(authRequired = false)
-    WebProductSettings getProductSettings(@NotNull WebSession webSession);
+    /**
+     * Returns information of system.
+     */
+    @WebAction
+    WebPropertyInfo[] getSystemInformationProperties(@NotNull WebSession webSession);
+
+    @WebAction
+    WebGroupPropertiesInfo<ProductSettingDescriptor> getProductSettings(@NotNull WebSession webSession);
 
     @WebAction
     List<WebDatabaseDriverInfo> getDriverList(@NotNull WebSession webSession, String driverId) throws DBWebException;
@@ -63,13 +67,6 @@ public interface DBWServiceCore extends DBWService {
     @WebAction(authRequired = false)
     List<WebConnectionFolderInfo> getConnectionFolders(
         @NotNull WebSession webSession, @Nullable String projectId, @Nullable String id) throws DBWebException;
-
-    @Deprecated
-    @WebAction
-    List<WebDataSourceConfig> getTemplateDataSources() throws DBWebException;
-
-    @WebAction
-    List<WebConnectionInfo> getTemplateConnections(@NotNull WebSession webSession, @Nullable String projectId) throws DBWebException;
 
     @WebAction(authRequired = false)
     String[] getSessionPermissions(@NotNull WebSession webSession) throws DBWebException;
@@ -119,10 +116,10 @@ public interface DBWServiceCore extends DBWService {
         @NotNull WebSession webSession,
         @Nullable String projectId,
         @NotNull String connectionId,
-        @NotNull Map<String, Object> authProperties,
+        @WebParameterSecure @Nullable Map<String, Object> authProperties,
         @Nullable List<WebNetworkHandlerConfigInput> networkCredentials,
-        @Nullable Boolean saveCredentials,
-        @Nullable Boolean sharedCredentials,
+        boolean saveCredentials,
+        boolean sharedCredentials,
         @Nullable String selectedCredentials
     ) throws DBWebException;
 
@@ -130,38 +127,37 @@ public interface DBWServiceCore extends DBWService {
     WebConnectionInfo createConnection(
         @NotNull WebSession webSession,
         @Nullable @WebObjectId String projectId,
-        @NotNull WebConnectionConfig connectionConfig
+        @WebParameterSecure @NotNull Map<String, Object> connectionConfig
     ) throws DBWebException;
 
     @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
     WebConnectionInfo updateConnection(
         @NotNull WebSession webSession,
         @Nullable @WebObjectId String projectId,
-        @NotNull WebConnectionConfig connectionConfig) throws DBWebException;
+        @NotNull Map<String, Object> connectionConfig
+    ) throws DBWebException;
 
     @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
     boolean deleteConnection(
         @NotNull WebSession webSession,
         @Nullable @WebObjectId String projectId,
-        @NotNull String connectionId) throws DBWebException;
-
-    @WebAction
-    WebConnectionInfo createConnectionFromTemplate(
-        @NotNull WebSession webSession,
-        @NotNull String projectId,
-        @NotNull String templateId,
-        @Nullable String connectionName) throws DBWebException;
+        @NotNull String connectionId
+    ) throws DBWebException;
 
     @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
     WebConnectionInfo copyConnectionFromNode(
         @NotNull WebSession webSession,
         @Nullable @WebObjectId String projectId,
         @NotNull String nodePath,
-        @NotNull WebConnectionConfig config) throws DBWebException;
+        @NotNull Map<String, Object> connectionConfig
+    ) throws DBWebException;
 
     @WebAction
     WebConnectionInfo testConnection(
-        @NotNull WebSession webSession, @Nullable String projectId, @NotNull WebConnectionConfig connectionConfig) throws DBWebException;
+        @NotNull WebSession webSession,
+        @Nullable String projectId,
+        @NotNull Map<String, Object> connectionConfig
+    ) throws DBWebException;
 
     @WebAction
     WebNetworkEndpointInfo testNetworkHandler(@NotNull WebSession webSession, @NotNull WebNetworkHandlerConfigInput nhConfig) throws DBWebException;
@@ -182,7 +178,7 @@ public interface DBWServiceCore extends DBWService {
     WebConnectionFolderInfo createConnectionFolder(
         @NotNull WebSession session,
         @Nullable @WebObjectId String projectId,
-        @NotNull String parentNodePath,
+        @Nullable String parentNodePath,
         @NotNull String newName) throws DBWebException;
 
     @WebProjectAction(requireProjectPermissions = {RMConstants.PERMISSION_PROJECT_DATASOURCES_EDIT})
@@ -209,10 +205,10 @@ public interface DBWServiceCore extends DBWService {
     ///////////////////////////////////////////
     // Async tasks
 
-    @WebAction
+    @WebAction(authRequired = false)
     WebAsyncTaskInfo getAsyncTaskInfo(WebSession webSession, String taskId, Boolean removeOnFinish) throws DBWebException;
 
-    @WebAction
+    @WebAction(authRequired = false)
     boolean cancelAsyncTask(WebSession webSession, String taskId) throws DBWebException;
 
 }

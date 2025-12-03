@@ -9,10 +9,8 @@ import { observer } from 'mobx-react-lite';
 import { useContext } from 'react';
 
 import { getComputed, s, SContext, type StyleRegistry, Translate, TreeNodeNestedMessage, useS } from '@cloudbeaver/core-blocks';
-import { useService } from '@cloudbeaver/core-di';
 import type { NavNodeInfoResource, ProjectsNavNodeService } from '@cloudbeaver/core-navigation-tree';
-import { ProjectsService } from '@cloudbeaver/core-projects';
-import { NAV_NODE_TYPE_RM_PROJECT, RESOURCES_NODE_PATH } from '@cloudbeaver/core-resource-manager';
+import { isRMProjectNode, RESOURCES_NODE_PATH } from '@cloudbeaver/core-resource-manager';
 import { createPath } from '@cloudbeaver/core-utils';
 import {
   ElementsTreeContext,
@@ -55,7 +53,7 @@ export function navigationTreeProjectsRendererRenderer(
   return nodeId => {
     const node = navNodeInfoResource.get(nodeId);
 
-    if (node?.nodeType === NAV_NODE_TYPE_RM_PROJECT) {
+    if (isRMProjectNode(node)) {
       return ProjectRenderer;
     }
 
@@ -89,7 +87,6 @@ const ProjectRenderer: NavigationNodeRendererComponent = observer(function Manag
   expanded,
 }) {
   const styles = useS(style);
-  const projectsService = useService(ProjectsService);
   const elementsTreeContext = useContext(ElementsTreeContext);
 
   const { node } = useNode(nodeId);

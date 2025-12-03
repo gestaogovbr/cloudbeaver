@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -42,25 +42,28 @@ export const MenuItemElement = observer<IMenuItemElementProps>(function MenuItem
   const translate = useTranslate();
 
   const title = translate(label);
-  loading = useStateDelay(loading, 100);
+  loading = useStateDelay(loading, 300);
 
   return (
     <div className={s(styles, { menuPanelItem: true })} title={tooltip ? translate(tooltip) : title}>
-      <div className={s(styles, { menuItemIcon: true })}>
-        <Loader className={s(styles, { loader: true })} suspense small fullSize>
-          {typeof icon === 'string' ? <IconOrImage className={s(styles, { iconOrImage: true })} icon={icon} /> : icon}
-        </Loader>
-      </div>
-      {displayLabel ? (
-        <div className={s(styles, { menuItemText: true })} title={title}>
-          {title}
+      <div className={s(styles, { menuItemMain: true })}>
+        <div className={s(styles, { menuItemIcon: true })}>
+          <Loader className={s(styles, { loader: true })} suspense small fullSize>
+            {typeof icon === 'string' ? <IconOrImage className={s(styles, { iconOrImage: true })} icon={icon} /> : icon}
+          </Loader>
         </div>
-      ) : (
-        <div />
-      )}
-      <div className={s(styles, { menuItemBinding: true })} title={binding}>
-        {binding}
+        {displayLabel ? (
+          <div className={s(styles, { menuItemText: true })} title={title}>
+            {title}
+          </div>
+        ) : (
+          <div />
+        )}
+        <div className={s(styles, { menuItemBinding: true })} title={binding}>
+          {binding}
+        </div>
       </div>
+
       <div className={s(styles, { menuItemContent: true })}>
         {loading && <Loader className={s(styles, { loader: true })} small fullSize />}
         {panelAvailable !== false && menu && !loading && <Icon name="context-menu-submenu" viewBox="0 0 6 7" className={s(styles, { icon: true })} />}

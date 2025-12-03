@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@ import { AdministrationScreenService } from '@cloudbeaver/core-administration';
 import {
   AppAuthService,
   AUTH_PROVIDER_LOCAL_ID,
-  AuthInfoService,
   AuthProviderContext,
   AuthProviderService,
   AuthProvidersResource,
@@ -35,7 +34,21 @@ import { isAutoLoginSessionAction } from './isAutoLoginSessionAction.js';
 
 export type AuthEventType = 'before' | 'after';
 
-@injectable()
+@injectable(() => [
+  ScreenService,
+  AppAuthService,
+  AuthDialogService,
+  UserInfoResource,
+  NotificationService,
+  AdministrationScreenService,
+  AuthProviderService,
+  AuthProvidersResource,
+  SessionDataResource,
+  ServerConfigResource,
+  WindowsService,
+  SessionActionService,
+  NavigationService,
+])
 export class AuthenticationService extends Bootstrap {
   readonly onLogout: Executor<AuthEventType>;
   readonly onLogin: Executor<AuthEventType>;
@@ -43,14 +56,13 @@ export class AuthenticationService extends Bootstrap {
   configureAuthProvider: (() => void) | null;
   configureIdentityProvider: (() => void) | null;
 
-  private authPromise: Promise<DialogueStateResult | null> | null;
+  private authPromise: Promise<DialogueStateResult> | null;
 
   constructor(
     private readonly screenService: ScreenService,
     private readonly appAuthService: AppAuthService,
     private readonly authDialogService: AuthDialogService,
     private readonly userInfoResource: UserInfoResource,
-    private readonly authInfoService: AuthInfoService,
     private readonly notificationService: NotificationService,
     private readonly administrationScreenService: AdministrationScreenService,
     private readonly authProviderService: AuthProviderService,
@@ -168,12 +180,12 @@ export class AuthenticationService extends Bootstrap {
 
     this.authPromise = this.authDialogService
       .showLoginForm(persistent, options)
-      .then(async state => {
-        if (state === DialogueStateResult.Rejected) {
-          return state;
+      .then(async ({ status }) => {
+        if (status === DialogueStateResult.Rejected) {
+          return status;
         }
         await this.onLogin.execute('after');
-        return state;
+        return status;
       })
       .finally(() => {
         this.authPromise = null;
@@ -207,8 +219,8 @@ export class AuthenticationService extends Bootstrap {
     this.administrationScreenService.ensurePermissions.addHandler(async () => {
       await this.waitAuth();
 
-      const userInfo = await this.userInfoResource.load();
-      if (userInfo) {
+      await this.userInfoResource.load();
+      if (this.userInfoResource.isAuthenticated()) {
         return;
       }
 
@@ -221,7 +233,7 @@ export class AuthenticationService extends Bootstrap {
     const action = contexts.getContext(sessionActionContext);
 
     if (isAutoLoginSessionAction(data)) {
-      const user = await this.userInfoResource.finishFederatedAuthentication(data['auth-id'], false);
+      const user = await this.userInfoResource.autoLogin(data['auth-id'], false);
 
       if (user) {
         //we request this method/request bc login form can be opened automatically.

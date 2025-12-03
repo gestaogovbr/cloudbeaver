@@ -1,0 +1,2 @@
+@import 'tailwindcss' layer(base) prefix(tw);
+@custom-variant dark (&:where(.theme-dark, .theme-dark *));

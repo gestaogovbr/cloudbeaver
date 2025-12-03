@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ export class MetadataMap<TKey, TValue> implements Map<TKey, TValue> {
     });
   }
 
-  [Symbol.iterator](): IterableIterator<[TKey, TValue]> {
+  [Symbol.iterator](): ArrayIterator<[TKey, TValue]> {
     return this.temp[Symbol.iterator]();
   }
 
@@ -63,15 +63,15 @@ export class MetadataMap<TKey, TValue> implements Map<TKey, TValue> {
     this.temp.forEach(callbackfn, thisArg);
   }
 
-  entries(): IterableIterator<[TKey, TValue]> {
+  entries(): ArrayIterator<[TKey, TValue]> {
     return this.temp.entries();
   }
 
-  keys(): IterableIterator<TKey> {
+  keys(): ArrayIterator<TKey> {
     return this.temp.keys();
   }
 
-  values(): IterableIterator<TValue> {
+  values(): ArrayIterator<TValue> {
     return this.temp.values();
   }
 
@@ -86,7 +86,7 @@ export class MetadataMap<TKey, TValue> implements Map<TKey, TValue> {
 
   // TODO replace zod schema with just validation callback returning true/false.
   // In case we use something else than zod
-  get(key: TKey, defaultValue?: DefaultValueGetter<TKey, TValue>, schema?: schema.AnyZodObject): TValue {
+  get(key: TKey, defaultValue?: DefaultValueGetter<TKey, TValue>, schema?: schema.ZodObject): TValue {
     const value = this.temp.get(key);
     let invalidate = !this.temp.has(key);
 

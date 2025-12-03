@@ -16,6 +16,7 @@
  */
 package io.cloudbeaver.service.ldap.auth;
 
+import io.cloudbeaver.service.ldap.auth.ssl.LdapSslSetting;
 import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.model.security.SMAuthProviderCustomConfiguration;
 import org.jkiss.utils.CommonUtils;
@@ -33,9 +34,12 @@ public class LdapSettings {
     private final String bindUser;
     private final String bindUserPassword;
     private final String filter;
+    private final String loginAttribute;
+    private final LdapSslSetting ldapSslSetting;
+    private final String referralHandlingMode;
 
 
-    protected LdapSettings(
+    public LdapSettings(
         SMAuthProviderCustomConfiguration providerConfiguration
     ) {
         this.providerConfiguration = providerConfiguration;
@@ -48,6 +52,12 @@ public class LdapSettings {
         this.bindUser = providerConfiguration.getParameterOrDefault(LdapConstants.PARAM_BIND_USER, "");
         this.bindUserPassword = providerConfiguration.getParameterOrDefault(LdapConstants.PARAM_BIND_USER_PASSWORD, "");
         this.filter = providerConfiguration.getParameterOrDefault(LdapConstants.PARAM_FILTER, "");
+        this.loginAttribute = providerConfiguration.getParameterOrDefault(LdapConstants.PARAM_LOGIN, "");
+        this.ldapSslSetting = new LdapSslSetting(
+            providerConfiguration.getParameter(LdapConstants.PARAM_SSL_ENABLE),
+            providerConfiguration.getParameter(LdapConstants.PARAM_SSL_CERT)
+        );
+        this.referralHandlingMode = providerConfiguration.getParameterOrDefault(LdapConstants.PARAM_REFERRAL_HANDLING,  "ignore");
     }
 
 
@@ -66,6 +76,9 @@ public class LdapSettings {
     }
 
     public String getLdapProviderUrl() {
+        if (ldapSslSetting.isEnable()) {
+            return "ldaps://" + getHost() + ":" + getPort();
+        }
         return "ldap://" + getHost() + ":" + getPort();
     }
 
@@ -84,5 +97,22 @@ public class LdapSettings {
 
     public String getFilter() {
         return filter;
+    }
+
+    public String getLoginAttribute() {
+        return loginAttribute;
+    }
+
+    public LdapSslSetting getLdapSslSetting() {
+        return ldapSslSetting;
+    }
+
+    @NotNull
+    public SMAuthProviderCustomConfiguration getProviderConfiguration() {
+        return providerConfiguration;
+    }
+
+    public String getReferralHandlingMode() {
+        return referralHandlingMode;
     }
 }

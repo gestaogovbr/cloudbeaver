@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,24 +8,28 @@
 import { observer } from 'mobx-react-lite';
 import { useCallback } from 'react';
 
-import { Combobox, Group, GroupTitle, type ITag, s, Tag, Tags, useResource, useS, useTranslate } from '@cloudbeaver/core-blocks';
+import { Combobox, ConfirmationDialog, Group, GroupTitle, type ITag, s, Tag, Tags, useResource, useS, useTranslate } from '@cloudbeaver/core-blocks';
 import { DBDriverResource } from '@cloudbeaver/core-connections';
 import { CachedMapAllKey, resourceKeyList } from '@cloudbeaver/core-resource';
-import type { ServerConfigInput } from '@cloudbeaver/core-sdk';
-import { isDefined } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 
 import style from './ServerConfigurationDriversForm.module.css';
+import { useService } from '@cloudbeaver/core-di';
+import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
+import type { IServerConfig } from './IServerConfigurationFormPartState.js';
 
 interface Props {
-  serverConfig: ServerConfigInput;
+  serverConfig: IServerConfig;
+  initialServerConfig: IServerConfig;
 }
 
-export const ServerConfigurationDriversForm = observer<Props>(function ServerConfigurationDriversForm({ serverConfig }) {
+export const ServerConfigurationDriversForm = observer<Props>(function ServerConfigurationDriversForm({ serverConfig, initialServerConfig }) {
   const styles = useS(style);
   const translate = useTranslate();
   const driversResource = useResource(ServerConfigurationDriversForm, DBDriverResource, CachedMapAllKey);
 
   const drivers = driversResource.data.filter(isDefined).sort(driversResource.resource.compare);
+  const commonDialogService = useService(CommonDialogService);
 
   const tags: ITag[] = driversResource.resource
     .get(resourceKeyList(serverConfig.disabledDrivers || []))
@@ -45,20 +49,35 @@ export const ServerConfigurationDriversForm = observer<Props>(function ServerCon
     [serverConfig.disabledDrivers],
   );
 
-  const handleRemove = useCallback(
-    (id: string) => {
-      if (!serverConfig.disabledDrivers) {
+  async function handleRemove(id: string) {
+    if (!serverConfig.disabledDrivers) {
+      return;
+    }
+
+    const driver = driversResource.resource.get(id);
+    const isInitiallyDisabledDriver = initialServerConfig.disabledDrivers?.includes(id);
+
+    if (driver?.embedded && !driver?.safeEmbeddedDriver && isInitiallyDisabledDriver) {
+      const { status } = await commonDialogService.open(ConfirmationDialog, {
+        title: 'ui_security_warning',
+        message: translate('administration_disabled_drivers_enable_unsafe_driver_message', undefined, { driverName: driver?.name || id }),
+        confirmActionText: 'ui_enable',
+        icon: '/icons/warning_icon.svg',
+        bigIcon: true,
+        size: 'medium',
+      });
+
+      if (status === DialogueStateResult.Rejected) {
         return;
       }
+    }
 
-      const index = serverConfig.disabledDrivers.indexOf(id);
+    const index = serverConfig.disabledDrivers.indexOf(id);
 
-      if (index !== -1) {
-        serverConfig.disabledDrivers.splice(index, 1);
-      }
-    },
-    [serverConfig.disabledDrivers],
-  );
+    if (index !== -1) {
+      serverConfig.disabledDrivers.splice(index, 1);
+    }
+  }
 
   return (
     <Group maximum gap>
@@ -70,7 +89,6 @@ export const ServerConfigurationDriversForm = observer<Props>(function ServerCon
         isDisabled={item => serverConfig.disabledDrivers?.includes(item.id) ?? false}
         items={drivers}
         placeholder={translate('administration_disabled_drivers_search_placeholder')}
-        searchable
         onSelect={handleSelect}
       />
       <Tags className={s(styles, { wrapper: true })}>

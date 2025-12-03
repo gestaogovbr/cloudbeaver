@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ export class TempMap<TKey, TValue> implements Map<TKey, TValue> {
     return Array.from(this.keys()).length;
   }
 
-  [Symbol.iterator](): IterableIterator<[TKey, TValue]> {
+  [Symbol.iterator](): ArrayIterator<[TKey, TValue]> {
     return this.entries();
   }
 
@@ -25,7 +25,7 @@ export class TempMap<TKey, TValue> implements Map<TKey, TValue> {
 
   private readonly deleted: Map<TKey, boolean>;
   private readonly temp: Map<TKey, TValue>;
-  private flushTask: NodeJS.Timeout | null;
+  private flushTask: ReturnType<typeof setTimeout> | null;
   private readonly keysTemp: ICachedValueObject<TKey[]>;
   private readonly valuesTemp: ICachedValueObject<TValue[]>;
   private readonly entriesTemp: ICachedValueObject<[TKey, TValue][]>;
@@ -114,17 +114,17 @@ export class TempMap<TKey, TValue> implements Map<TKey, TValue> {
     return this;
   }
 
-  entries(): IterableIterator<[TKey, TValue]> {
+  entries(): ArrayIterator<[TKey, TValue]> {
     return this.entriesTemp.value(() => Array.from(this.keys()).map<[TKey, TValue]>(key => [key, this.get(key)!])).values();
   }
 
-  keys(): IterableIterator<TKey> {
+  keys(): ArrayIterator<TKey> {
     return this.keysTemp
       .value(() => Array.from(new Set(combineITerableIterators(this.target.keys(), this.temp.keys()))).filter(key => !this.isDeleted(key)))
       .values();
   }
 
-  values(): IterableIterator<TValue> {
+  values(): ArrayIterator<TValue> {
     return this.valuesTemp.value(() => Array.from(this.keys()).map<TValue>(key => this.get(key)!)).values();
   }
 

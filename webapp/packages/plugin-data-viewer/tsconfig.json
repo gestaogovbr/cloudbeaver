@@ -1,142 +1,89 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@cloudbeaver/tsconfig/tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/tsconfig.tsbuildinfo",
+    "composite": true
   },
   "references": [
     {
-      "path": "../core-administration/tsconfig.json"
+      "path": "../../common-react/@dbeaver/react-tests"
     },
     {
-      "path": "../core-app/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/cli"
     },
     {
-      "path": "../core-authentication/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/js-helpers"
     },
     {
-      "path": "../core-blocks/tsconfig.json"
+      "path": "../../common-typescript/@dbeaver/result-set-api"
     },
     {
-      "path": "../core-browser/tsconfig.json"
+      "path": "../core-blocks"
     },
     {
-      "path": "../core-browser/tsconfig.json"
+      "path": "../core-browser"
     },
     {
-      "path": "../core-client-activity/tsconfig.json"
+      "path": "../core-cli"
     },
     {
-      "path": "../core-connections/tsconfig.json"
+      "path": "../core-connections"
     },
     {
-      "path": "../core-connections/tsconfig.json"
+      "path": "../core-data-context"
     },
     {
-      "path": "../core-data-context/tsconfig.json"
+      "path": "../core-di"
     },
     {
-      "path": "../core-di/tsconfig.json"
+      "path": "../core-dialogs"
     },
     {
-      "path": "../core-dialogs/tsconfig.json"
+      "path": "../core-events"
     },
     {
-      "path": "../core-dialogs/tsconfig.json"
+      "path": "../core-executor"
     },
     {
-      "path": "../core-events/tsconfig.json"
+      "path": "../core-links"
     },
     {
-      "path": "../core-events/tsconfig.json"
+      "path": "../core-localization"
     },
     {
-      "path": "../core-executor/tsconfig.json"
+      "path": "../core-navigation-tree"
     },
     {
-      "path": "../core-links/tsconfig.json"
+      "path": "../core-resource"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../core-root"
     },
     {
-      "path": "../core-localization/tsconfig.json"
+      "path": "../core-sdk"
     },
     {
-      "path": "../core-navigation-tree/tsconfig.json"
+      "path": "../core-settings"
     },
     {
-      "path": "../core-navigation-tree/tsconfig.json"
+      "path": "../core-ui"
     },
     {
-      "path": "../core-projects/tsconfig.json"
+      "path": "../core-utils"
     },
     {
-      "path": "../core-resource/tsconfig.json"
+      "path": "../core-view"
     },
     {
-      "path": "../core-root/tsconfig.json"
+      "path": "../plugin-codemirror6"
     },
     {
-      "path": "../core-root/tsconfig.json"
+      "path": "../plugin-navigation-tabs"
     },
     {
-      "path": "../core-routing/tsconfig.json"
-    },
-    {
-      "path": "../core-sdk/tsconfig.json"
-    },
-    {
-      "path": "../core-sdk/tsconfig.json"
-    },
-    {
-      "path": "../core-settings/tsconfig.json"
-    },
-    {
-      "path": "../core-settings/tsconfig.json"
-    },
-    {
-      "path": "../core-storage/tsconfig.json"
-    },
-    {
-      "path": "../core-ui/tsconfig.json"
-    },
-    {
-      "path": "../core-ui/tsconfig.json"
-    },
-    {
-      "path": "../core-utils/tsconfig.json"
-    },
-    {
-      "path": "../core-view/tsconfig.json"
-    },
-    {
-      "path": "../core-view/tsconfig.json"
-    },
-    {
-      "path": "../plugin-codemirror6/tsconfig.json"
-    },
-    {
-      "path": "../plugin-datasource-context-switch/tsconfig.json"
-    },
-    {
-      "path": "../plugin-navigation-tabs/tsconfig.json"
-    },
-    {
-      "path": "../plugin-navigation-tabs/tsconfig.json"
-    },
-    {
-      "path": "../plugin-navigation-tree/tsconfig.json"
-    },
-    {
-      "path": "../plugin-object-viewer/tsconfig.json"
-    },
-    {
-      "path": "../plugin-object-viewer/tsconfig.json"
-    },
-    {
-      "path": "../tests-runner/tsconfig.json"
+      "path": "../plugin-object-viewer"
     }
   ],
   "include": [
@@ -148,7 +95,6 @@
   ],
   "exclude": [
     "**/node_modules",
-    "lib/**/*",
-    "dist/**/*"
+    "lib/**/*"
   ]
 }

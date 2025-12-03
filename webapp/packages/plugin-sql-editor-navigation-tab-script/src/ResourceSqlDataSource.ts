@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,13 @@ import type { ProjectInfoResource, ProjectsService } from '@cloudbeaver/core-pro
 import { isResourceAlias, type ResourceKey, ResourceKeyUtils } from '@cloudbeaver/core-resource';
 import { getRmResourceKey, ResourceManagerResource } from '@cloudbeaver/core-resource-manager';
 import type { NetworkStateService } from '@cloudbeaver/core-root';
-import { debounce, getPathName, isArraysEqual, isNotNullDefined, isObjectsEqual, isValuesEqual } from '@cloudbeaver/core-utils';
+import { debounce, getPathName, isArraysEqual, isObjectsEqual, isValuesEqual } from '@cloudbeaver/core-utils';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
 import { SCRIPTS_TYPE_ID } from '@cloudbeaver/plugin-resource-manager-scripts';
-import { BaseSqlDataSource, ESqlDataSourceFeatures, SqlEditorService } from '@cloudbeaver/plugin-sql-editor';
+import { BaseSqlDataSource, ESqlDataSourceFeatures, SqlEditorService, type ISqlEditorCursor } from '@cloudbeaver/plugin-sql-editor';
 
 import type { IResourceSqlDataSourceState } from './IResourceSqlDataSourceState.js';
+import type { TLocalizationToken } from '@cloudbeaver/core-localization';
 
 interface IResourceActions {
   rename(dataSource: ResourceSqlDataSource, key: string, name: string): Promise<string>;
@@ -37,7 +39,6 @@ interface IResourceActions {
 }
 
 const VALUE_SYNC_DELAY = 1 * 1000;
-const MESSAGE_DISPLAY_DELAY = 4 * 1000;
 
 export class ResourceSqlDataSource extends BaseSqlDataSource {
   static override key = 'resource';
@@ -82,6 +83,37 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
 
   get resourceKey(): string | undefined {
     return this.state.resourceKey;
+  }
+
+  get isProjectDifferent(): boolean {
+    if (!this.resourceKey) {
+      return false;
+    }
+
+    const projectId = this.executionContext?.projectId;
+    const resourceProjectId = getRmResourceKey(this.resourceKey).projectId;
+    const userProjectId = this.projectsService.userProject?.id;
+
+    return isNotNullDefined(projectId) && resourceProjectId !== projectId && resourceProjectId !== userProjectId;
+  }
+
+  override get message(): TLocalizationToken | undefined {
+    if (this.isReadonly()) {
+      return 'plugin_sql_editor_navigation_tab_script_state_readonly';
+    }
+
+    if (this.isProjectDifferent) {
+      return 'plugin_sql_editor_navigation_tab_script_state_different_project';
+    }
+
+    return undefined;
+  }
+
+  override get isExecutionContextSaved(): boolean {
+    if (this.isProjectDifferent) {
+      return true;
+    }
+    return super.isExecutionContextSaved;
   }
 
   get reload(): undefined | (() => Promise<void>) {
@@ -218,14 +250,14 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
     super.setProject(projectId);
   }
 
-  override setScript(script: string): void {
+  override setScript(script: string, source?: string, cursor?: ISqlEditorCursor): void {
     const previous = this.state.script;
     if (previous === script) {
       return;
     }
 
     this.state.script = script;
-    super.setScript(script);
+    super.setScript(script, source, cursor);
 
     if (this.isAutoSaveEnabled) {
       this.debouncedWrite();
@@ -328,13 +360,13 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
         }
         this.exception = null;
 
-        this.message = 'plugin_sql_editor_navigation_tab_script_state_renaming';
+        this.loadingMessage = 'plugin_sql_editor_navigation_tab_script_state_renaming';
         this.setResourceKey(await this.actions.rename(this, this.resourceKey, name));
       } catch (exception: any) {
         this.exception = exception;
         throw exception;
       } finally {
-        this.message = undefined;
+        this.loadingMessage = undefined;
       }
     });
   }
@@ -367,29 +399,17 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
       try {
         this.exception = null;
 
-        const projectId = this.executionContext?.projectId;
-        const resourceProjectId = getRmResourceKey(this.resourceKey).projectId;
-        const userProjectId = this.projectsService.userProject?.id;
-
-        if (isNotNullDefined(projectId) && resourceProjectId !== projectId && resourceProjectId !== userProjectId) {
-          this.message = 'plugin_sql_editor_navigation_tab_script_state_different_project';
-
-          await new Promise(resolve => setTimeout(resolve, MESSAGE_DISPLAY_DELAY));
+        if (this.isProjectDifferent || this.isReadonly()) {
           return;
         }
 
-        if (!this.isReadonly()) {
-          this.message = 'plugin_sql_editor_navigation_tab_script_state_updating';
-          const executionContext = await this.actions.setProperties(this, this.resourceKey, this.executionContext);
+        this.loadingMessage = 'plugin_sql_editor_navigation_tab_script_state_updating';
+        const executionContext = await this.actions.setProperties(this, this.resourceKey, this.executionContext);
 
-          this.setExecutionContext(executionContext);
-          this.setBaseExecutionContext(this.executionContext);
-        } else {
-          this.message = 'plugin_sql_editor_navigation_tab_script_state_readonly';
-          await new Promise(resolve => setTimeout(resolve, MESSAGE_DISPLAY_DELAY));
-        }
+        this.setExecutionContext(executionContext);
+        this.setBaseExecutionContext(this.executionContext);
       } finally {
-        this.message = undefined;
+        this.loadingMessage = undefined;
       }
     });
   }
@@ -407,12 +427,13 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
         await this.readData();
 
         if (!this.isIncomingChanges) {
-          this.message = 'plugin_sql_editor_navigation_tab_script_state_saving';
-          await this.actions.write(this, this.resourceKey, this.script);
-          this.setBaseScript(this.script);
+          this.loadingMessage = 'plugin_sql_editor_navigation_tab_script_state_saving';
+          const script = this.script;
+          await this.actions.write(this, this.resourceKey, script);
+          this.setBaseScript(script);
         }
       } finally {
-        this.message = undefined;
+        this.loadingMessage = undefined;
       }
     });
   }
@@ -422,7 +443,7 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
       if (!this.actions || !this.resourceKey) {
         return;
       }
-      this.message = 'plugin_sql_editor_navigation_tab_script_state_reading';
+      this.loadingMessage = 'plugin_sql_editor_navigation_tab_script_state_reading';
       const script = await this.actions.read(this, this.resourceKey);
       const executionContext = await this.actions.getProperties(this, this.resourceKey);
 
@@ -446,7 +467,7 @@ export class ResourceSqlDataSource extends BaseSqlDataSource {
         this.loaded = true;
       });
     } finally {
-      this.message = undefined;
+      this.loadingMessage = undefined;
     }
   }
 

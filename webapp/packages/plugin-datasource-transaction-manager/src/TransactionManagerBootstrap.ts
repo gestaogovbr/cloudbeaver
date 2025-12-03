@@ -1,11 +1,11 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
-import { ConfirmationDialog } from '@cloudbeaver/core-blocks';
+import { ConfirmationDialog, importLazyComponent } from '@cloudbeaver/core-blocks';
 import {
   ConnectionExecutionContext,
   ConnectionExecutionContextResource,
@@ -23,17 +23,42 @@ import { NotificationService } from '@cloudbeaver/core-events';
 import { ExecutorInterrupter, type IExecutionContextProvider } from '@cloudbeaver/core-executor';
 import { LocalizationService } from '@cloudbeaver/core-localization';
 import { OptionsPanelService } from '@cloudbeaver/core-ui';
-import { isNotNullDefined } from '@cloudbeaver/core-utils';
-import { ActionService, MenuService } from '@cloudbeaver/core-view';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
+import { ActionService, MenuCustomItem, menuItemsPlaceAfter, MenuService } from '@cloudbeaver/core-view';
 import { ConnectionSchemaManagerService } from '@cloudbeaver/plugin-datasource-context-switch';
 import { MENU_APP_ACTIONS } from '@cloudbeaver/plugin-top-app-bar';
+import { MENU_TOOLS } from '@cloudbeaver/plugin-tools-panel';
 
 import { ACTION_DATASOURCE_TRANSACTION_COMMIT } from './actions/ACTION_DATASOURCE_TRANSACTION_COMMIT.js';
 import { ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE } from './actions/ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE.js';
 import { ACTION_DATASOURCE_TRANSACTION_ROLLBACK } from './actions/ACTION_DATASOURCE_TRANSACTION_ROLLBACK.js';
+import { createTransactionInfoParam } from './TransactionLog/TRANSACTION_INFO_PARAM_SCHEMA.js';
+import { TransactionLogCountResource } from './TransactionLog/TransactionLogCountResource.js';
 import { TransactionManagerSettingsService } from './TransactionManagerSettingsService.js';
 
-@injectable()
+const TransactionInfoAction = importLazyComponent(() =>
+  import('./TransactionLog/TransactionInfoAction.js').then(module => module.TransactionInfoAction),
+);
+
+const TransactionLogDialog = importLazyComponent(() =>
+  import('./TransactionLog/TransactionLogDialog.js').then(module => module.TransactionLogDialog),
+);
+
+@injectable(() => [
+  MenuService,
+  ActionService,
+  ConnectionSchemaManagerService,
+  ConnectionExecutionContextService,
+  ConnectionExecutionContextResource,
+  ConnectionInfoResource,
+  ConnectionsManagerService,
+  OptionsPanelService,
+  NotificationService,
+  CommonDialogService,
+  LocalizationService,
+  TransactionManagerSettingsService,
+  TransactionLogCountResource,
+])
 export class TransactionManagerBootstrap extends Bootstrap {
   constructor(
     private readonly menuService: MenuService,
@@ -48,12 +73,33 @@ export class TransactionManagerBootstrap extends Bootstrap {
     private readonly commonDialogService: CommonDialogService,
     private readonly localizationService: LocalizationService,
     private readonly transactionManagerSettingsService: TransactionManagerSettingsService,
+    private readonly transactionLogCountResource: TransactionLogCountResource,
   ) {
     super();
   }
 
   override register() {
     this.connectionsManagerService.onDisconnect.addHandler(this.disconnectHandler.bind(this));
+
+    const TRANSACTION_INFO_ITEM = new MenuCustomItem(
+      {
+        id: 'transaction-info',
+        getComponent: () => TransactionInfoAction,
+      },
+      {
+        onSelect: async () => {
+          const transaction = this.getContextTransaction();
+
+          if (transaction) {
+            await this.commonDialogService.open(TransactionLogDialog, {
+              transaction,
+              onCommit: () => this.commit(transaction),
+              onRollback: () => this.rollback(transaction),
+            });
+          }
+        },
+      },
+    );
 
     this.menuService.addCreator({
       menus: [MENU_APP_ACTIONS],
@@ -68,12 +114,36 @@ export class TransactionManagerBootstrap extends Bootstrap {
           isNotNullDefined(transaction.autoCommit)
         );
       },
-      getItems: (_, items) => [
-        ...items,
-        ACTION_DATASOURCE_TRANSACTION_COMMIT,
-        ACTION_DATASOURCE_TRANSACTION_ROLLBACK,
-        ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE,
-      ],
+      getItems: (_, items) => {
+        const transaction = this.getContextTransaction();
+
+        const result = [
+          ...items,
+          ACTION_DATASOURCE_TRANSACTION_COMMIT,
+          ACTION_DATASOURCE_TRANSACTION_ROLLBACK,
+          ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE,
+        ];
+
+        if (transaction && transaction.autoCommit === false) {
+          result.push(TRANSACTION_INFO_ITEM);
+        }
+
+        return result;
+      },
+      orderItems: (context, items) => {
+        menuItemsPlaceAfter(
+          items,
+          [
+            ACTION_DATASOURCE_TRANSACTION_COMMIT,
+            ACTION_DATASOURCE_TRANSACTION_ROLLBACK,
+            ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE,
+            TRANSACTION_INFO_ITEM,
+          ],
+          MENU_TOOLS,
+        );
+
+        return items;
+      },
     });
 
     this.actionService.addHandler({
@@ -108,6 +178,10 @@ export class TransactionManagerBootstrap extends Bootstrap {
           return true;
         }
 
+        if (action === ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE) {
+          return !this.transactionManagerSettingsService.allowCommitModeSwitch;
+        }
+
         if (action === ACTION_DATASOURCE_TRANSACTION_COMMIT || action === ACTION_DATASOURCE_TRANSACTION_ROLLBACK) {
           return transaction.autoCommit === true;
         }
@@ -127,19 +201,19 @@ export class TransactionManagerBootstrap extends Bootstrap {
             break;
           }
           case ACTION_DATASOURCE_TRANSACTION_ROLLBACK: {
-            try {
-              const result = await transaction.rollback();
-              this.showTransactionResult(transaction, result);
-            } catch (exception: any) {
-              this.notificationService.logException(exception, 'plugin_datasource_transaction_manager_rollback_fail');
-            }
-
+            await this.rollback(transaction);
             break;
           }
           case ACTION_DATASOURCE_TRANSACTION_COMMIT_MODE_TOGGLE:
             try {
               await transaction.setAutoCommit(!transaction.autoCommit);
               await this.connectionExecutionContextResource.refresh();
+
+              const context = transaction.context;
+
+              if (transaction.autoCommit === true && context) {
+                this.transactionLogCountResource.markOutdated(createTransactionInfoParam(context.connectionId, context.projectId, context.id));
+              }
             } catch (exception: any) {
               this.notificationService.logException(exception, 'plugin_datasource_transaction_manager_commit_mode_fail');
             }
@@ -182,21 +256,30 @@ export class TransactionManagerBootstrap extends Bootstrap {
 
           if (transaction?.autoCommit === false) {
             const connectionData = this.connectionInfoResource.get(connectionKey);
-            const state = await this.commonDialogService.open(ConfirmationDialog, {
+            const { status, result } = await this.commonDialogService.open(ConfirmationDialog, {
               title: `${this.localizationService.translate('plugin_datasource_transaction_manager_commit')} (${connectionData?.name ?? context.id})`,
               message: 'plugin_datasource_transaction_manager_commit_confirmation_message',
               confirmActionText: 'plugin_datasource_transaction_manager_commit',
-              extraStatus: 'no',
+              showExtraAction: true,
             });
 
-            if (state === DialogueStateResult.Resolved) {
+            if (status === DialogueStateResult.Resolved) {
               await this.commit(transaction, () => ExecutorInterrupter.interrupt(contexts));
-            } else if (state === DialogueStateResult.Rejected) {
+            } else if (!result?.isExtraAction) {
               ExecutorInterrupter.interrupt(contexts);
             }
           }
         }
       }
+    }
+  }
+
+  private async rollback(transaction: ConnectionExecutionContext) {
+    try {
+      const result = await transaction.rollback();
+      this.showTransactionResult(transaction, result);
+    } catch (exception: any) {
+      this.notificationService.logException(exception, 'plugin_datasource_transaction_manager_rollback_fail');
     }
   }
 

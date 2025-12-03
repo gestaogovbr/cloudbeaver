@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2024 DBeaver Corp and others
+ * Copyright (C) 2010-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import io.cloudbeaver.DBWConstants;
 import io.cloudbeaver.auth.*;
-import io.cloudbeaver.model.app.WebAuthApplication;
-import io.cloudbeaver.model.app.WebAuthConfiguration;
+import io.cloudbeaver.model.app.ServletAuthApplication;
+import io.cloudbeaver.model.app.ServletAuthConfiguration;
 import io.cloudbeaver.model.config.SMControllerConfiguration;
 import io.cloudbeaver.registry.WebAuthProviderDescriptor;
 import io.cloudbeaver.registry.WebAuthProviderRegistry;
@@ -31,13 +31,17 @@ import io.cloudbeaver.service.security.bruteforce.BruteForceUtils;
 import io.cloudbeaver.service.security.bruteforce.UserLoginRecord;
 import io.cloudbeaver.service.security.db.CBDatabase;
 import io.cloudbeaver.service.security.internal.AuthAttemptSessionInfo;
+import io.cloudbeaver.service.security.internal.CBAuthSubjectRepo;
 import io.cloudbeaver.service.security.internal.SMTokenInfo;
+import io.cloudbeaver.utils.WebEventUtils;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBPConnectionInformation;
 import org.jkiss.dbeaver.model.DBPPage;
 import org.jkiss.dbeaver.model.auth.*;
+import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.model.exec.DBCException;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
 import org.jkiss.dbeaver.model.impl.jdbc.exec.JDBCTransaction;
@@ -52,13 +56,15 @@ import org.jkiss.dbeaver.model.security.user.*;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
 import org.jkiss.dbeaver.model.websocket.event.WSUserCloseSessionsEvent;
 import org.jkiss.dbeaver.model.websocket.event.WSUserDeletedEvent;
+import org.jkiss.dbeaver.model.websocket.event.WSUserDisabledEvent;
 import org.jkiss.dbeaver.model.websocket.event.permissions.WSObjectPermissionEvent;
-import org.jkiss.dbeaver.model.websocket.event.permissions.WSSubjectPermissionEvent;
+import org.jkiss.dbeaver.model.websocket.event.session.WSAuthEvent;
 import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 import org.jkiss.utils.SecurityUtils;
 
 import java.lang.reflect.Type;
+import java.net.URI;
 import java.sql.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -68,7 +74,7 @@ import java.util.stream.Collectors;
 /**
  * Server controller
  */
-public class CBEmbeddedSecurityController<T extends WebAuthApplication>
+public class CBEmbeddedSecurityController<T extends ServletAuthApplication>
     implements SMAdminController, SMAuthenticationManager {
 
     private static final Log log = Log.getLog(CBEmbeddedSecurityController.class);
@@ -98,10 +104,111 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         this.smConfig = smConfig;
     }
 
-    private boolean isSubjectExists(String subjectId) throws DBCException {
+    @Override
+    public void setObjectSettings(
+        @NotNull String objectId,
+        @NotNull SMObjectType objectType,
+        @NotNull Map<String, Object> settings
+    ) throws DBException {
+        String userId = getUserIdOrThrow();
+        try (Connection dbCon = database.openConnection()) {
+            try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
+                deleteObjectSettings(objectId, objectType, settings.keySet());
+                try (
+                    PreparedStatement dbStat = dbCon.prepareStatement(
+                        "INSERT INTO {table_prefix}CB_OBJECT_SETTINGS" +
+                            "(OBJECT_ID,OBJECT_TYPE,SUBJECT_ID,SETTING_ID,SETTING_VALUE,UPDATED_BY,UPDATE_TIME) " +
+                            "VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)")
+                ) {
+                    for (Map.Entry<String, Object> entry : settings.entrySet()) {
+                        dbStat.setString(1, objectId);
+                        dbStat.setString(2, objectType.name());
+                        dbStat.setString(3, userId);
+                        dbStat.setString(4, entry.getKey());
+                        dbStat.setString(5, CommonUtils.toString(entry.getValue()));
+                        dbStat.setString(6, userId);
+                        dbStat.addBatch();
+                    }
+                    dbStat.executeBatch();
+                }
+                txn.commit();
+            }
+        } catch (SQLException e) {
+            throw new DBCException("Error while adding object settings", e);
+        }
+    }
+
+    @NotNull
+    @Override
+    public Map<String, Object> getObjectSettings(
+        @NotNull String objectId,
+        @NotNull SMObjectType objectType,
+        @Nullable String settingId
+    ) throws DBException {
+        String userId = getUserIdOrThrow();
+        try (Connection dbCon = database.openConnection()) {
+            try (
+                PreparedStatement dbStat = dbCon.prepareStatement("SELECT SETTING_ID,SETTING_VALUE " +
+                    "FROM {table_prefix}CB_OBJECT_SETTINGS " +
+                    "WHERE OBJECT_ID=? AND OBJECT_TYPE=? AND SUBJECT_ID=?" +
+                    (settingId == null ? "" : " AND SETTING_ID=?"))
+            ) {
+                int index = 1;
+                dbStat.setString(index++, objectId);
+                dbStat.setString(index++, objectType.name());
+                dbStat.setString(index++, userId);
+                if (settingId != null) {
+                    dbStat.setString(index++, settingId);
+                }
+                try (ResultSet dbResult = dbStat.executeQuery()) {
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    while (dbResult.next()) {
+                        result.put(
+                            dbResult.getString(1),
+                            dbResult.getString(2)
+                        );
+                    }
+                    return result;
+                }
+            }
+        } catch (SQLException e) {
+            throw new DBCException("Error while getting object settings", e);
+        }
+    }
+
+    @Override
+    public void deleteObjectSettings(
+        @NotNull String objectId,
+        @NotNull SMObjectType objectType,
+        @Nullable Set<String> settingIds
+    ) throws DBException {
+        String userId = getUserIdOrThrow();
+        String sql = "DELETE FROM {table_prefix}CB_OBJECT_SETTINGS WHERE OBJECT_ID=? AND OBJECT_TYPE=? AND SUBJECT_ID=?";
+        if (settingIds != null && !settingIds.isEmpty()) {
+            sql += " AND SETTING_ID IN (" + SQLUtils.generateParamList(settingIds.size()) + ")";
+        }
+        try (Connection dbCon = database.openConnection()) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(sql)) {
+                int index = 1;
+                dbStat.setString(index++, objectId);
+                dbStat.setString(index++, objectType.name());
+                dbStat.setString(index++, userId);
+                if (settingIds != null) {
+                    for (String settingId : settingIds) {
+                        dbStat.setString(index++, settingId);
+                    }
+                }
+                dbStat.executeUpdate();
+            }
+        } catch (SQLException e) {
+            throw new DBCException("Error while deleting object settings", e);
+        }
+    }
+
+    protected boolean isSubjectExists(String subjectId) throws DBCException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT 1 FROM {table_prefix}CB_AUTH_SUBJECT WHERE SUBJECT_ID=?"))
+                "SELECT 1 FROM {table_prefix}CB_AUTH_SUBJECT WHERE SUBJECT_ID=?")
             ) {
                 dbStat.setString(1, subjectId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -126,17 +233,26 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         boolean enabled,
         @Nullable String defaultAuthRole
     ) throws DBException {
+        userId = userId.toLowerCase(); // creating new users only with lowercase
+        validateAndCreateUser(userId, metaParameters, enabled, defaultAuthRole);
+    }
+
+    protected void validateAndCreateUser(
+        @NotNull String userId,
+        @Nullable Map<String, String> metaParameters,
+        boolean enabled,
+        @Nullable String defaultAuthRole
+    ) throws DBException {
         if (CommonUtils.isEmpty(userId)) {
             throw new DBCException("Empty user name is not allowed");
         }
-        userId = userId.toLowerCase(); // creating new users only with lowercase
         if (isSubjectExists(userId)) {
             throw new DBCException("User or team '" + userId + "' already exists");
         }
         log.debug("Create user: " + userId);
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
-                createUser(dbCon, userId, metaParameters, enabled, defaultAuthRole);
+                insertUser(dbCon, userId, metaParameters, enabled, defaultAuthRole);
                 txn.commit();
             }
         } catch (SQLException e) {
@@ -147,7 +263,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     /**
      * Creates user. Saves user id in database as it is.
      */
-    public void createUser(
+    protected void insertUser(
         @NotNull Connection dbCon,
         @NotNull String userId,
         @Nullable Map<String, String> metaParameters,
@@ -156,8 +272,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     ) throws DBException, SQLException {
         createAuthSubject(dbCon, userId, SMSubjectType.user, true);
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("INSERT INTO {table_prefix}CB_USER" +
-                "(USER_ID,IS_ACTIVE,CREATE_TIME,DEFAULT_AUTH_ROLE) VALUES(?,?,?,?)"))
+            "INSERT INTO {table_prefix}CB_USER" +
+                "(USER_ID,IS_ACTIVE,CREATE_TIME,DEFAULT_AUTH_ROLE) VALUES(?,?,?,?)")
         ) {
             dbStat.setString(1, userId);
             dbStat.setString(2, enabled ? CHAR_BOOL_TRUE : CHAR_BOOL_FALSE);
@@ -168,6 +284,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 dbStat.setString(4, defaultAuthRole);
             }
             dbStat.execute();
+            log.info(String.format("New user created: [userId=%s]", userId));
         }
         saveSubjectMetas(dbCon, userId, metaParameters);
         String defaultTeamName = getDefaultUserTeam();
@@ -187,15 +304,27 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
     protected void importUsers(@NotNull Connection connection, @NotNull SMUserImportList userImportList)
         throws DBException, SQLException {
+        outer:
         for (SMUserProvisioning user : userImportList.getUsers()) {
             String authRole = user.getAuthRole() == null ? userImportList.getAuthRole() : user.getAuthRole();
-            if (isSubjectExists(user.getUserId())) {
-                log.info("User already exist : " + user.getUserId());
-                setUserAuthRole(connection, user.getUserId(), authRole);
-                enableUser(connection, user.getUserId(), true);
-                continue;
+            String userId = user.getUserId();
+            Map<String, String> metaParameters = user.getMetaParameters();
+            if (CommonUtils.isNotEmpty(metaParameters.get(SMStandardMeta.META_USER_ID))) {
+                userId = metaParameters.get(SMStandardMeta.META_USER_ID);
             }
-            createUser(connection, user.getUserId(), user.getMetaParameters(), true, authRole);
+            for (String possibleUserId : List.of(userId, userId.toLowerCase())) {
+                if (isSubjectExists(possibleUserId)) {
+                    if (getSubjectType(possibleUserId) == SMSubjectType.team) {
+                        log.error("Cannot import user '%s': a team with this name already exists.".formatted(possibleUserId));
+                    } else {
+                        log.info("User already exist : " + possibleUserId);
+                        setUserAuthRole(connection, possibleUserId, authRole);
+                        enableUser(connection, possibleUserId, true, null, null);
+                    }
+                    continue outer;
+                }
+            }
+            insertUser(connection, userId.toLowerCase(), metaParameters, true, authRole);
         }
     }
 
@@ -207,7 +336,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 deleteAuthSubject(dbCon, userId);
                 JDBCUtils.executeStatement(
                     dbCon,
-                    database.normalizeTableNames("DELETE FROM {table_prefix}CB_USER WHERE USER_ID=?"),
+                    "DELETE FROM {table_prefix}CB_USER WHERE USER_ID=?",
                     userId
                 );
                 txn.commit();
@@ -217,6 +346,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
         var event = new WSUserDeletedEvent(userId);
         application.getEventController().addEvent(event);
+        log.info(String.format("User deleted: [userId=%s]", userId));
     }
 
     public void setUserTeams(String userId, String[] teamIds, String grantorId) throws DBCException {
@@ -271,8 +401,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (
             var dbCon = database.openConnection();
             PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("UPDATE {table_prefix}CB_USER_TEAM " +
-                    "SET TEAM_ROLE=? WHERE USER_ID=? AND TEAM_ID=?"))
+                "UPDATE {table_prefix}CB_USER_TEAM " +
+                    "SET TEAM_ROLE=? WHERE USER_ID=? AND TEAM_ID=?")
         ) {
             JDBCUtils.setStringOrNull(dbStat, 1, teamRole);
             dbStat.setString(2, userId);
@@ -281,6 +411,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        log.info(String.format(
+            "User set team role: [userId=%s,teamId=%s, role=%s]",
+            userId,
+            teamId,
+            teamRole
+        ));
     }
 
     //TODO implement add/delete user teams api
@@ -293,7 +429,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             deleteUserTeamsSql =
                 deleteUserTeamsSql + " AND TEAM_ID NOT IN (" + SQLUtils.generateParamList(teamIds.length) + ")";
         }
-        try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(deleteUserTeamsSql))) {
+        try (PreparedStatement dbStat = dbCon.prepareStatement(deleteUserTeamsSql)) {
             int index = 1;
             dbStat.setString(index++, userId);
             for (String teamId : teamIds) {
@@ -310,8 +446,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             Set<String> currentUserTeams = getCurrentUserTeams(dbCon, userId);
 
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("INSERT INTO {table_prefix}CB_USER_TEAM" +
-                    "(USER_ID,TEAM_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)"))
+                "INSERT INTO {table_prefix}CB_USER_TEAM" +
+                    "(USER_ID,TEAM_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)")
             ) {
                 for (String teamId : teamIds) {
                     if (currentUserTeams.contains(teamId)) {
@@ -331,7 +467,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private Set<String> getCurrentUserTeams(@NotNull Connection dbCon, String userId) throws SQLException {
         return new HashSet<>(JDBCUtils.queryStrings(
             dbCon,
-            database.normalizeTableNames("SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM WHERE USER_ID=?"),
+            "SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM WHERE USER_ID=?",
             userId
         ));
     }
@@ -353,14 +489,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
         Set<String> currentUserTeams = getCurrentUserTeams(dbCon, userId);
 
+        List<String> resultTeamIds = new ArrayList<>();
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("INSERT INTO {table_prefix}CB_USER_TEAM" +
-                "(USER_ID,TEAM_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)"))
+            "INSERT INTO {table_prefix}CB_USER_TEAM" +
+                "(USER_ID,TEAM_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)")
         ) {
             for (String teamId : teamIds) {
                 if (currentUserTeams.contains(teamId)) {
                     continue;
                 }
+                resultTeamIds.add(teamId);
                 dbStat.setString(1, userId);
                 dbStat.setString(2, teamId);
                 dbStat.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
@@ -368,17 +506,30 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 dbStat.execute();
             }
         }
+        log.info(String.format(
+            "User added to team: [userId=%s,team=%s, grantorUserId=%s]",
+            userId,
+            String.join(",", resultTeamIds),
+            grantorId
+        ));
     }
 
     protected void deleteUserTeams(
         @NotNull Connection dbCon,
         @NotNull String userId,
         @NotNull String[] teamIds
-    ) throws SQLException {
+    ) throws SQLException, DBCException {
+        String defaultTeam = getDefaultUserTeam();
+        if (ArrayUtils.contains(teamIds, defaultTeam)) {
+            throw new SMException("Cannot delete default user team: " + defaultTeam);
+        }
+        if (ArrayUtils.isEmpty(teamIds)) {
+            return;
+        }
         String deleteUserTeamsSql = "DELETE FROM {table_prefix}CB_USER_TEAM WHERE USER_ID=? " +
                 "AND TEAM_ID IN (" + SQLUtils.generateParamList(teamIds.length) + ")";
 
-        try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(deleteUserTeamsSql))) {
+        try (PreparedStatement dbStat = dbCon.prepareStatement(deleteUserTeamsSql)) {
             int index = 1;
             dbStat.setString(index, userId);
             for (String teamId : teamIds) {
@@ -387,6 +538,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             }
             dbStat.execute();
         }
+        log.info(String.format("User deleted from team: [userId=%s,teamIds=%s]", userId, String.join(",", teamIds)));
     }
 
     @NotNull
@@ -395,11 +547,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         Map<String, SMUserTeam> teams = new LinkedHashMap<>();
         try (Connection dbCon = database.openConnection()) {
             String defaultUserTeam = getDefaultUserTeam();
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
+            try (PreparedStatement dbStat = dbCon.prepareStatement(
                 "SELECT R.*,S.IS_SECRET_STORAGE,UR.TEAM_ROLE FROM {table_prefix}CB_USER_TEAM UR, {table_prefix}CB_TEAM R, " +
                     "{table_prefix}CB_AUTH_SUBJECT S " +
                         "WHERE UR.USER_ID=? AND UR.TEAM_ID = R.TEAM_ID " +
-                        "AND S.SUBJECT_ID IN (R.TEAM_ID,?)"))
+                        "AND S.SUBJECT_ID IN (R.TEAM_ID,?)")
             ) {
                 dbStat.setString(1, userId);
                 dbStat.setString(2, defaultUserTeam);
@@ -422,7 +574,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         Set<String> allSubjects = new HashSet<>();
         allSubjects.add(subjectId);
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM UR WHERE USER_ID=?"))
+            "SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM UR WHERE USER_ID=?")
         ) {
             dbStat.setString(1, subjectId);
             try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -445,15 +597,15 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             SMUser user;
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT U.USER_ID,U.IS_ACTIVE,U.DEFAULT_AUTH_ROLE,S.IS_SECRET_STORAGE FROM " +
-                        "{table_prefix}CB_USER U, {table_prefix}CB_AUTH_SUBJECT S " +
-                        "WHERE U.USER_ID=? AND U.USER_ID=S.SUBJECT_ID")
-            )) {
+                """
+                    SELECT U.USER_ID,U.IS_ACTIVE,U.DEFAULT_AUTH_ROLE,S.IS_SECRET_STORAGE,U.CHANGE_DATE,U.DISABLED_BY,U.DISABLE_REASON
+                    FROM {table_prefix}CB_USER U, {table_prefix}CB_AUTH_SUBJECT S
+                    WHERE U.USER_ID=? AND U.USER_ID=S.SUBJECT_ID""")
+            ) {
                 dbStat.setString(1, userId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     if (dbResult.next()) {
-                        user = fetchUser(dbResult);
+                        user = fetchUser(dbResult, true);
                     } else {
                         return null;
                     }
@@ -461,8 +613,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             }
             readSubjectMetas(dbCon, user);
             // Teams
-            try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM WHERE USER_ID=?"))
+            try (PreparedStatement dbStat = dbCon.prepareStatement("SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM WHERE USER_ID=?")
             ) {
                 String defaultUserTeam = getDefaultUserTeam();
                 dbStat.setString(1, userId);
@@ -490,8 +641,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     @Override
     public int countUsers(@NotNull SMUserFilter filter) throws DBCException {
         try (Connection dbCon = database.openConnection()) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
-                "SELECT COUNT(*) FROM {table_prefix}CB_USER" + buildUsersFilter(filter)))) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(
+                "SELECT COUNT(*) FROM {table_prefix}CB_USER" + buildUsersFilter(filter))) {
                 setUsersFilterValues(dbStat, filter, 1);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     if (dbResult.next()) {
@@ -520,16 +671,15 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             Map<String, SMUser> result = new LinkedHashMap<>();
             // Read users
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT USER_ID,IS_ACTIVE,DEFAULT_AUTH_ROLE FROM {table_prefix}CB_USER"
-                    + buildUsersFilter(filter) + "\nORDER BY USER_ID " + getOffsetLimitPart(filter)))) {
+                "SELECT USER_ID,IS_ACTIVE,DEFAULT_AUTH_ROLE,CHANGE_DATE,DISABLED_BY,"
+                    + "DISABLE_REASON FROM {table_prefix}CB_USER"
+                    + buildUsersFilter(filter) + "\nORDER BY USER_ID " + getOffsetLimitPart(filter))) {
                 setUsersFilterValues(dbStat, filter, 1);
 
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     while (dbResult.next()) {
-                        String userId = dbResult.getString(1);
-                        String active = dbResult.getString(2);
-                        String authRole = dbResult.getString(3);
-                        result.put(userId, new SMUser(userId, CHAR_BOOL_TRUE.equals(active), authRole));
+                        SMUser user = fetchUser(dbResult, false);
+                        result.put(user.getUserId(), user);
                     }
                 }
             }
@@ -542,7 +692,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 "SELECT USER_ID,TEAM_ID FROM {table_prefix}CB_USER_TEAM\n" +
                 "WHERE USER_ID IN (" + SQLUtils.generateParamList(result.size()) + ")";
             // Read teams
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(teamsSql))) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(teamsSql)) {
                 int parameterIndex = 1;
                 for (String userId : result.keySet()) {
                     dbStat.setString(parameterIndex++, userId);
@@ -599,7 +749,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void cleanupSubjectMeta(Connection dbCon, String subjectId) throws SQLException {
         // Delete old metas
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("DELETE FROM {table_prefix}CB_SUBJECT_META WHERE SUBJECT_ID=?"))
+            "DELETE FROM {table_prefix}CB_SUBJECT_META WHERE SUBJECT_ID=?")
         ) {
             dbStat.setString(1, subjectId);
             dbStat.execute();
@@ -609,7 +759,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void readSubjectMetas(Connection dbCon, SMSubject subject) throws SQLException {
         // Metas
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("SELECT META_ID,META_VALUE FROM {table_prefix}CB_SUBJECT_META WHERE SUBJECT_ID=?"))
+            "SELECT META_ID,META_VALUE FROM {table_prefix}CB_SUBJECT_META WHERE SUBJECT_ID=?")
         ) {
             dbStat.setString(1, subject.getSubjectId());
             try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -627,10 +777,10 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                                    Map<String, ? extends SMSubject> result) throws SQLException {
         // Read metas
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("SELECT m.SUBJECT_ID,m.META_ID,m.META_VALUE FROM {table_prefix}CB_AUTH_SUBJECT s, " +
+            "SELECT m.SUBJECT_ID,m.META_ID,m.META_VALUE FROM {table_prefix}CB_AUTH_SUBJECT s, " +
                 "{table_prefix}CB_SUBJECT_META m\n" +
                 "WHERE s.SUBJECT_TYPE=? AND s.SUBJECT_ID=m.SUBJECT_ID" +
-                (CommonUtils.isEmpty(userIdMask) ? "" : " AND s.SUBJECT_ID LIKE ?")))
+                (CommonUtils.isEmpty(userIdMask) ? "" : " AND s.SUBJECT_ID LIKE ?"))
         ) {
             dbStat.setString(1, subjectType.getCode());
             if (!CommonUtils.isEmpty(userIdMask)) {
@@ -654,7 +804,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void saveSubjectMetas(Connection dbCon, String subjectId, Map<String, String> metaParameters) throws SQLException {
         if (!CommonUtils.isEmpty(metaParameters)) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("INSERT INTO {table_prefix}CB_SUBJECT_META(SUBJECT_ID,META_ID,META_VALUE) VALUES(?,?,?)"))
+                "INSERT INTO {table_prefix}CB_SUBJECT_META(SUBJECT_ID,META_ID,META_VALUE) VALUES(?,?,?)")
             ) {
                 dbStat.setString(1, subjectId);
                 for (Map.Entry<String, String> mp : metaParameters.entrySet()) {
@@ -666,6 +816,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+    @NotNull
     @Override
     public Map<String, Object> getCurrentUserParameters() throws DBCException {
         String userId = getUserIdOrThrow();
@@ -673,7 +824,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             Map<String, Object> result = new LinkedHashMap<>();
             // Read users
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT * FROM {table_prefix}CB_USER_PREFERENCES WHERE USER_ID=?"))
+                "SELECT * FROM {table_prefix}CB_USER_PREFERENCES WHERE USER_ID=?")
             ) {
                 dbStat.setString(1, userId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -709,8 +860,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         if (value == null) {
             // Delete old metas
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "DELETE FROM {table_prefix}CB_USER_PREFERENCES WHERE USER_ID=? AND PREFERENCE_ID=?"))
+                "DELETE FROM {table_prefix}CB_USER_PREFERENCES WHERE USER_ID=? AND PREFERENCE_ID=?")
             ) {
                 dbStat.setString(1, userId);
                 dbStat.setString(2, name);
@@ -720,8 +870,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             // Update/Insert parameter
             boolean updated;
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("UPDATE {table_prefix}CB_USER_PREFERENCES " +
-                    "SET PREFERENCE_VALUE=? WHERE USER_ID=? AND PREFERENCE_ID=?"))
+                "UPDATE {table_prefix}CB_USER_PREFERENCES SET PREFERENCE_VALUE=? WHERE USER_ID=? AND PREFERENCE_ID=?")
             ) {
                 dbStat.setString(1, CommonUtils.toString(value));
                 dbStat.setString(2, userId);
@@ -730,8 +879,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             }
             if (!updated) {
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("INSERT INTO {table_prefix}CB_USER_PREFERENCES " +
-                        "(USER_ID,PREFERENCE_ID,PREFERENCE_VALUE) VALUES(?,?,?)"))
+                    "INSERT INTO {table_prefix}CB_USER_PREFERENCES (USER_ID,PREFERENCE_ID,PREFERENCE_VALUE) VALUES(?,?,?)")
                 ) {
                     dbStat.setString(1, userId);
                     dbStat.setString(2, name);
@@ -757,21 +905,40 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
-    public void enableUser(String userId, boolean enabled) throws DBException {
+    public void enableUser(
+        @NotNull String userId,
+        boolean enabled,
+        @Nullable String disabledBy,
+        @Nullable String disableReason
+    ) throws DBException {
         try (Connection dbCon = database.openConnection()) {
-            enableUser(dbCon, userId, enabled);
+            enableUser(dbCon, userId, enabled, disabledBy, disableReason);
         } catch (SQLException e) {
             throw new DBCException("Error while updating user configuration", e);
         }
     }
 
-    public void enableUser(Connection dbCon, String userId, boolean enabled) throws SQLException {
-        try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
-            "UPDATE {table_prefix}CB_USER SET IS_ACTIVE=? WHERE USER_ID=?"))) {
+    protected void enableUser(
+        @NotNull Connection dbCon,
+        @NotNull String userId,
+        boolean enabled,
+        @Nullable String disabledBy,
+        @Nullable String disableReason
+    ) throws SQLException {
+        try (PreparedStatement dbStat = dbCon.prepareStatement(
+            "UPDATE {table_prefix}CB_USER SET IS_ACTIVE=?, CHANGE_DATE=?, DISABLED_BY=?, DISABLE_REASON=? WHERE USER_ID=?")) {
             dbStat.setString(1, enabled ? CHAR_BOOL_TRUE : CHAR_BOOL_FALSE);
-            dbStat.setString(2, userId);
+            dbStat.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            JDBCUtils.setStringOrNull(dbStat, 3, enabled ? null : disabledBy);
+            JDBCUtils.setStringOrNull(dbStat, 4, enabled ? null : disableReason);
+            dbStat.setString(5, userId);
             dbStat.executeUpdate();
         }
+        if (!enabled) {
+            var event = new WSUserDisabledEvent(userId);
+            application.getEventController().addEvent(event);
+        }
+        log.info(String.format("User updated: [userId=%s, isActive=%s, reason=%s]", userId, enabled, disableReason));
     }
 
     @Override
@@ -792,7 +959,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public void setUserAuthRole(@NotNull Connection dbCon, @NotNull String userId, @Nullable String authRole)
         throws DBException, SQLException {
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("UPDATE {table_prefix}CB_USER SET DEFAULT_AUTH_ROLE=? WHERE USER_ID=?"))) {
+            "UPDATE {table_prefix}CB_USER SET DEFAULT_AUTH_ROLE=? WHERE USER_ID=?")) {
             if (authRole == null) {
                 dbStat.setNull(1, Types.VARCHAR);
             } else {
@@ -802,6 +969,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             if (dbStat.executeUpdate() <= 0) {
                 throw new SMException("User not found");
             }
+            log.info(String.format("User set auth role: [userId=%s,role=%s]", userId, authRole));
         }
     }
 
@@ -851,8 +1019,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
         List<String[]> transformedCredentials;
         WebAuthProviderDescriptor authProvider = getAuthProvider(authProviderId);
+        if (authProvider.isCaseInsensitive() && !isSubjectExists(userId) && isSubjectExists(userId.toLowerCase())) {
+            log.warn("User with id '" + userId + "' not found, credentials will be set for the user: " + userId.toLowerCase());
+            userId = userId.toLowerCase();
+        }
         try {
             SMAuthCredentialsProfile credProfile = getCredentialProfileByParameters(authProvider, credentials.keySet());
+            String finalUserId = userId;
             transformedCredentials = credentials.entrySet().stream().map(cred -> {
                 String propertyName = cred.getKey();
                 AuthPropertyDescriptor property = credProfile.getCredentialParameter(propertyName);
@@ -860,7 +1033,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     return null;
                 }
                 String encodedValue = CommonUtils.toString(cred.getValue());
-                encodedValue = property.getEncryption().encrypt(userId, encodedValue);
+                encodedValue = property.getEncryption().encrypt(finalUserId, encodedValue);
                 return new String[]{propertyName, encodedValue};
             }).toList();
         } catch (Exception e) {
@@ -870,15 +1043,15 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 JDBCUtils.executeStatement(
                     dbCon,
-                    database.normalizeTableNames("DELETE FROM {table_prefix}CB_USER_CREDENTIALS WHERE USER_ID=? AND PROVIDER_ID=?"),
+                    "DELETE FROM {table_prefix}CB_USER_CREDENTIALS WHERE USER_ID=? AND PROVIDER_ID=?",
                     userId,
                     authProvider.getId()
                 );
                 if (!CommonUtils.isEmpty(credentials)) {
                     try (PreparedStatement dbStat = dbCon.prepareStatement(
-                        database.normalizeTableNames("INSERT INTO {table_prefix}CB_USER_CREDENTIALS" +
+                        "INSERT INTO {table_prefix}CB_USER_CREDENTIALS" +
                             "(USER_ID,PROVIDER_ID,CRED_ID,CRED_VALUE) VALUES(?,?,?,?)")
-                    )) {
+                    ) {
                         for (String[] cred : transformedCredentials) {
                             if (cred == null) {
                                 continue;
@@ -896,6 +1069,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         } catch (SQLException e) {
             throw new DBCException("Error saving user credentials in database", e);
         }
+        log.info(String.format("Set credentials for user: [userId=%s,providerId=%s]", userId, authProviderId));
     }
 
     @Override
@@ -903,13 +1077,14 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(
                 dbCon,
-                database.normalizeTableNames("DELETE FROM {table_prefix}CB_USER_CREDENTIALS WHERE USER_ID=? AND PROVIDER_ID=?"),
+                "DELETE FROM {table_prefix}CB_USER_CREDENTIALS WHERE USER_ID=? AND PROVIDER_ID=?",
                 userId,
                 authProviderId
             );
         } catch (SQLException e) {
             throw new DBCException("Error deleting user credentials", e);
         }
+        log.info(String.format("User credentials deleted: [userId=%s, providerId=%s]", userId, authProviderId));
     }
 
     @Nullable
@@ -969,7 +1144,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 .append(joinAlias).append("CRED_VALUE=?");
         }
         try (Connection dbCon = database.openConnection()) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sql.toString()))) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(sql.toString())) {
                 dbStat.setString(1, authProvider.getId());
                 int param = 2;
                 for (Map.Entry<String, String> credEntry : identCredentials.entrySet()) {
@@ -1016,8 +1191,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private Map<String, Object> getUserCredentials(WebAuthProviderDescriptor authProvider, String userId) throws DBCException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT CRED_ID,CRED_VALUE FROM {table_prefix}CB_USER_CREDENTIALS\n" +
-                    "WHERE USER_ID=? AND PROVIDER_ID=?"))) {
+                "SELECT CRED_ID,CRED_VALUE FROM {table_prefix}CB_USER_CREDENTIALS\n" +
+                    "WHERE USER_ID=? AND PROVIDER_ID=?")) {
                 dbStat.setString(1, userId);
 
                 dbStat.setString(2, authProvider.getId());
@@ -1042,6 +1217,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         return getUserCredentials(getUserIdOrThrow(), authProviderId);
     }
 
+    @NotNull
     @Override
     public String[] getCurrentUserLinkedProviders() throws DBException {
         return getUserLinkedProviders(getUserIdOrThrow());
@@ -1051,7 +1227,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public String[] getUserLinkedProviders(@NotNull String userId) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT DISTINCT PROVIDER_ID FROM {table_prefix}CB_USER_CREDENTIALS\n WHERE USER_ID=?"))) {
+                "SELECT DISTINCT PROVIDER_ID FROM {table_prefix}CB_USER_CREDENTIALS\n WHERE USER_ID=?")) {
                 dbStat.setString(1, userId);
 
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1077,7 +1253,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             WebMetaParametersRegistry.getInstance().getMetaParameters(subjectType));
 
         // Add metas from enabled auth providers
-        WebAuthConfiguration authConfiguration = application.getAuthConfiguration();
+        ServletAuthConfiguration authConfiguration = application.getAuthConfiguration();
         for (String apId : authConfiguration.getEnabledAuthProviders()) {
             WebAuthProviderDescriptor ap = WebAuthProviderRegistry.getInstance().getAuthProvider(apId);
             if (ap != null) {
@@ -1102,11 +1278,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             String defaultUserTeam = getDefaultUserTeam();
             Map<String, SMTeam> teams = new LinkedHashMap<>();
-            String query = database.normalizeTableNames(
+            String query =
                 """
                     SELECT T.*, S.IS_SECRET_STORAGE FROM {table_prefix}CB_TEAM T, \
                     {table_prefix}CB_AUTH_SUBJECT S \
-                    WHERE T.TEAM_ID IN (S.SUBJECT_ID, ?) ORDER BY TEAM_ID""");
+                    WHERE T.TEAM_ID IN (S.SUBJECT_ID, ?) ORDER BY TEAM_ID""";
             try (PreparedStatement dbPreparedStatement = dbCon.prepareStatement(query)) {
                 dbPreparedStatement.setString(1, defaultUserTeam);
                 try (ResultSet dbResult = dbPreparedStatement.executeQuery()) {
@@ -1116,11 +1292,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     }
                 }
             }
-            query = database.normalizeTableNames("""
+            query = """
                 SELECT SUBJECT_ID,PERMISSION_ID
                 FROM {table_prefix}CB_AUTH_PERMISSIONS AP, {table_prefix}CB_TEAM R
                 WHERE AP.SUBJECT_ID IN (R.TEAM_ID,?)
-                """);
+                """;
             try (PreparedStatement dbPreparedStatement = dbCon.prepareStatement(query)) {
                 dbPreparedStatement.setString(1, defaultUserTeam);
                 try (ResultSet dbResult = dbPreparedStatement.executeQuery()) {
@@ -1140,7 +1316,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     }
 
     @Override
-    public SMTeam findTeam(String teamId) throws DBCException {
+    public SMTeam findTeam(@NotNull String teamId) throws DBCException {
         return Arrays.stream(readAllTeams())
             .filter(r -> r.getTeamId().equals(teamId))
             .findFirst().orElse(null);
@@ -1158,9 +1334,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             Map<String, String> usersRoles = new LinkedHashMap<>();
             if (getDefaultUserTeam().equals(teamId)) {
-                try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("SELECT USER_ID FROM {table_prefix}CB_USER"))
-                ) {
+                try (PreparedStatement dbStat = dbCon.prepareStatement("SELECT USER_ID FROM {table_prefix}CB_USER")) {
                     try (ResultSet dbResult = dbStat.executeQuery()) {
                         while (dbResult.next()) {
                             usersRoles.put(dbResult.getString(1), null);
@@ -1169,8 +1343,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 }
             }
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT USER_ID,TEAM_ROLE FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?"))
+                "SELECT USER_ID,TEAM_ROLE FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?")
             ) {
                 dbStat.setString(1, teamId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1201,17 +1374,27 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     }
 
     @NotNull
-    private SMUser fetchUser(ResultSet dbResult) throws SQLException {
+    private SMUser fetchUser(ResultSet dbResult, boolean checkSecretStorage) throws SQLException {
+        Timestamp timestamp = dbResult.getTimestamp("CHANGE_DATE");
+        Instant disableDate = timestamp != null ? timestamp.toInstant() : null;
         return new SMUser(
             dbResult.getString("USER_ID"),
             stringToBoolean(dbResult.getString("IS_ACTIVE")),
             dbResult.getString("DEFAULT_AUTH_ROLE"),
-            stringToBoolean(dbResult.getString("IS_SECRET_STORAGE"))
+            !checkSecretStorage || stringToBoolean(dbResult.getString("IS_SECRET_STORAGE")),
+            disableDate,
+            dbResult.getString("DISABLED_BY"),
+            dbResult.getString("DISABLE_REASON")
         );
     }
 
     @Override
-    public void createTeam(String teamId, String name, String description, String grantor) throws DBCException {
+    public SMTeam createTeam(
+        @NotNull String teamId,
+        @Nullable String name,
+        @Nullable String description,
+        @NotNull String grantor
+    ) throws DBCException {
         if (CommonUtils.isEmpty(teamId)) {
             throw new DBCException("Empty team name is not allowed");
         }
@@ -1223,8 +1406,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 createAuthSubject(dbCon, teamId, SMSubjectType.team, true);
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("INSERT INTO {table_prefix}CB_TEAM" +
-                        "(TEAM_ID,TEAM_NAME,TEAM_DESCRIPTION,CREATE_TIME) VALUES(?,?,?,?)"))) {
+                    "INSERT INTO {table_prefix}CB_TEAM" +
+                        "(TEAM_ID,TEAM_NAME,TEAM_DESCRIPTION,CREATE_TIME) VALUES(?,?,?,?)")) {
                     dbStat.setString(1, teamId);
                     dbStat.setString(2, CommonUtils.notEmpty(name));
                     dbStat.setString(3, CommonUtils.notEmpty(description));
@@ -1243,6 +1426,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         } catch (SQLException e) {
             throw new DBCException("Error saving team in database", e);
         }
+        SMTeam smTeam = new SMTeam(teamId, name, description, true);
+        for (String permission : getDefaultTeamPermissions()) {
+            smTeam.addPermission(permission);
+        }
+        return smTeam;
     }
 
     protected String[] getDefaultTeamPermissions() {
@@ -1257,7 +1445,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("UPDATE {table_prefix}CB_TEAM SET TEAM_NAME=?,TEAM_DESCRIPTION=? WHERE TEAM_ID=?"))) {
+                    "UPDATE {table_prefix}CB_TEAM SET TEAM_NAME=?,TEAM_DESCRIPTION=? WHERE TEAM_ID=?")) {
                     dbStat.setString(1, CommonUtils.notEmpty(name));
                     dbStat.setString(2, CommonUtils.notEmpty(description));
                     dbStat.setString(3, teamId);
@@ -1281,8 +1469,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             if (!force) {
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("SELECT COUNT(*) FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?")
-                )) {
+                    "SELECT COUNT(*) FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?")
+                ) {
                     dbStat.setString(1, teamId);
                     try (ResultSet dbResult = dbStat.executeQuery()) {
                         if (dbResult.next()) {
@@ -1299,13 +1487,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 if (force) {
                     JDBCUtils.executeStatement(
                         dbCon,
-                        database.normalizeTableNames("DELETE FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?"),
+                        "DELETE FROM {table_prefix}CB_USER_TEAM WHERE TEAM_ID=?",
                         teamId
                     );
                 }
                 deleteAuthSubject(dbCon, teamId);
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("DELETE FROM {table_prefix}CB_TEAM WHERE TEAM_ID=?"))) {
+                    "DELETE FROM {table_prefix}CB_TEAM WHERE TEAM_ID=?")) {
                     dbStat.setString(1, teamId);
                     dbStat.execute();
                 }
@@ -1323,7 +1511,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     // Subject functions
 
     @Override
-    public void setSubjectMetas(@NotNull String subjectId, @NotNull Map<String, String> metaParameters) throws DBCException {
+    public void setSubjectMetas(@NotNull String subjectId, @NotNull Map<String, String> metaParameters) throws DBException {
+        validateSubjectMetaValues(metaParameters);
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 cleanupSubjectMeta(dbCon, subjectId);
@@ -1337,13 +1526,23 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+    private void validateSubjectMetaValues(@NotNull Map<String, String> metaParameters) throws DBException {
+        Optional<String> invalidValues = metaParameters.values()
+            .stream()
+            .filter(metaValue -> metaValue != null && metaValue.length() > 1024) // META_VALUE has max length of 1024
+            .findAny();
+        if (invalidValues.isPresent()) {
+            throw new DBException("One or more meta parameters contain invalid values. Please check the input and try again");
+        }
+    }
+
     @Override
     public void setSubjectPermissions(String subjectId, List<String> permissionIds, String grantorId) throws DBException {
 //        validatePermissions(SMConstants.SUBJECT_PERMISSION_SCOPE, permissionIds);
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 JDBCUtils.executeStatement(dbCon,
-                    database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?"),
+                    "DELETE FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?",
                     subjectId);
                 insertPermissions(dbCon, subjectId, permissionIds.toArray(String[]::new), grantorId);
                 txn.commit();
@@ -1354,11 +1553,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         addSubjectPermissionsUpdateEvent(subjectId, null);
     }
 
+
+    public void initialize() throws DBException {
+    }
+
     private void insertPermissions(Connection dbCon, String subjectId, String[] permissionIds, String grantorId) throws SQLException {
         if (!ArrayUtils.isEmpty(permissionIds)) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("INSERT INTO {table_prefix}CB_AUTH_PERMISSIONS" +
-                    "(SUBJECT_ID,PERMISSION_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)"))
+            try (
+                PreparedStatement dbStat = dbCon.prepareStatement(
+                "INSERT INTO {table_prefix}CB_AUTH_PERMISSIONS" +
+                    "(SUBJECT_ID,PERMISSION_ID,GRANT_TIME,GRANTED_BY) VALUES(?,?,?,?)")
             ) {
                 for (String permission : permissionIds) {
                     dbStat.setString(1, subjectId);
@@ -1377,7 +1581,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             Set<String> permissions = new HashSet<>();
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?"))) {
+                "SELECT PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?")) {
                 dbStat.setString(1, subjectId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     while (dbResult.next()) {
@@ -1397,10 +1601,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         try (Connection dbCon = database.openConnection()) {
             Set<String> permissions = new HashSet<>();
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT DISTINCT AP.PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS AP, {table_prefix}CB_USER_TEAM UR\n" +
-                        "WHERE UR.TEAM_ID = AP.SUBJECT_ID AND UR.USER_ID=?"
-                )
+                "SELECT DISTINCT AP.PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS AP, {table_prefix}CB_USER_TEAM UR\n" +
+                    "WHERE UR.TEAM_ID = AP.SUBJECT_ID AND UR.USER_ID=?"
             )) {
                 dbStat.setString(1, userId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1410,7 +1612,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 }
             }
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?"))
+                "SELECT PERMISSION_ID FROM {table_prefix}CB_AUTH_PERMISSIONS WHERE SUBJECT_ID=?")
             ) {
                 dbStat.setString(1, userId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1426,6 +1628,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+
     protected Set<String> getUserPermissions(String userId, String authRole) throws DBException {
         return getUserPermissions(userId);
     }
@@ -1434,11 +1637,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     // Sessions
 
     @Override
-    public boolean isSessionPersisted(String id) throws DBException {
+    public boolean isSessionPersisted(@NotNull String id) throws DBException {
         try (Connection dbCon = database.openConnection()) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT 1 FROM {table_prefix}CB_SESSION WHERE SESSION_ID=?"))
-            ) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement("SELECT 1 FROM {table_prefix}CB_SESSION WHERE SESSION_ID=?")) {
                 dbStat.setString(1, id);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     if (dbResult.next()) {
@@ -1452,6 +1653,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+    @NotNull
     private String createSmSession(
         @NotNull String appSessionId,
         @Nullable String userId,
@@ -1461,11 +1663,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     ) throws SQLException {
         var sessionId = UUID.randomUUID().toString();
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames(
-                "INSERT INTO {table_prefix}CB_SESSION(SESSION_ID, APP_SESSION_ID, USER_ID,CREATE_TIME,LAST_ACCESS_TIME," +
-                    "LAST_ACCESS_REMOTE_ADDRESS,LAST_ACCESS_USER_AGENT,LAST_ACCESS_INSTANCE_ID, SESSION_TYPE) " +
-                    "VALUES(?,?,?,?,?,?,?,?,?)"
-            )
+            "INSERT INTO {table_prefix}CB_SESSION(SESSION_ID, APP_SESSION_ID, USER_ID,CREATE_TIME,LAST_ACCESS_TIME," +
+                "LAST_ACCESS_REMOTE_ADDRESS,LAST_ACCESS_USER_AGENT,LAST_ACCESS_INSTANCE_ID, SESSION_TYPE) " +
+                "VALUES(?,?,?,?,?,?,?,?,?)"
         )) {
             dbStat.setString(1, sessionId);
             dbStat.setString(2, appSessionId);
@@ -1485,15 +1685,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+    @NotNull
     @Override
     public SMAuthInfo authenticateAnonymousUser(@NotNull String appSessionId, @NotNull Map<String, Object> sessionParameters, @NotNull SMSessionType sessionType) throws DBException {
-        if (!application.getAppConfiguration().isAnonymousAccessEnabled()) {
+        if (!application.isAnonymousAccessEnabled()) {
             throw new SMException("Anonymous access restricted");
         }
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
                 var smSessionId = createSmSession(appSessionId, null, sessionParameters, sessionType, dbCon);
-                var smTokens = generateNewSessionToken(smSessionId, null, null, dbCon);
+                var smTokens = generateNewSessionToken(smSessionId, null, null, dbCon, false);
                 var permissions = getAnonymousUserPermissions();
                 txn.commit();
                 return SMAuthInfo.successMainSession(
@@ -1502,7 +1703,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     smTokens.getSmRefreshToken(),
                     new SMAuthPermissions(null, smSessionId, permissions),
                     Map.of(),
-                    null
+                    null,
+                    appSessionId
                 );
             }
         } catch (SQLException e) {
@@ -1510,11 +1712,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
-    private Set<String> getAnonymousUserPermissions() throws DBException {
+    protected Set<String> getAnonymousUserPermissions() throws DBException {
         var anonymousUserTeam = application.getAppConfiguration().getAnonymousUserTeam();
         return getSubjectPermissions(anonymousUserTeam);
     }
 
+    @NotNull
     @Override
     public SMAuthInfo authenticate(
         @NotNull String appSessionId,
@@ -1565,13 +1768,19 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                             sessionType,
                             sessionParameters,
                             isMainSession,
-                            null,
                             forceSessionsLogout
                         );
                         throw e;
                     }
                 }
-
+                boolean isFederatedAuth = SMAuthProviderFederated.class.isAssignableFrom(authProviderInstance.getClass());
+                if (isFederatedAuth) {
+                    String userOrigin = JSONUtils.getString(userCredentials, SMConstants.USER_ORIGIN);
+                    if (CommonUtils.isEmpty(userOrigin)) {
+                        throw new SMException("User origin not found in authentication data");
+                    }
+                    filteredUserCreds.put(SMConstants.USER_ORIGIN, modifyOrigin(userOrigin));
+                }
                 authAttemptId = createNewAuthAttempt(
                     SMAuthStatus.IN_PROGRESS,
                     authProviderId,
@@ -1582,20 +1791,33 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     sessionType,
                     sessionParameters,
                     isMainSession,
-                    null,
                     forceSessionsLogout
                 );
 
-                if (SMAuthProviderFederated.class.isAssignableFrom(authProviderInstance.getClass())) {
+                if (isFederatedAuth) {
+                    String userOrigin = JSONUtils.getString(filteredUserCreds, SMConstants.USER_ORIGIN);
                     //async auth
                     var authProviderFederated = (SMAuthProviderFederated) authProviderInstance;
-                    String signInLink = buildRedirectLink(authProviderFederated.getSignInLink(authProviderConfigurationId, Map.of()),
-                        authAttemptId);
+                    String signInLink = buildRedirectLink(
+                        authProviderFederated.getSignInLink(authProviderConfigurationId, userOrigin),
+                        authAttemptId
+                    );
                     String signOutLink = authProviderFederated.getCommonSignOutLink(authProviderConfigurationId,
-                        providerConfig.getParameters());
-                    Map<SMAuthConfigurationReference, Object> authData = Map.of(new SMAuthConfigurationReference(authProviderId,
-                        authProviderConfigurationId), filteredUserCreds);
-                    return SMAuthInfo.inProgress(authAttemptId, signInLink, signOutLink, authData, isMainSession, forceSessionsLogout);
+                        providerConfig.getParameters(), userOrigin
+                    );
+                    Map<SMAuthConfigurationReference, Object> authData = Map.of(
+                        new SMAuthConfigurationReference(authProviderId, authProviderConfigurationId),
+                        filteredUserCreds
+                    );
+                    return SMAuthInfo.inProgress(
+                        authAttemptId,
+                        signInLink,
+                        signOutLink,
+                        authData,
+                        isMainSession,
+                        forceSessionsLogout,
+                        appSessionId
+                    );
                 }
                 txn.commit();
                 return finishAuthentication(
@@ -1603,10 +1825,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                         authAttemptId,
                         null,
                         null,
-                        Map.of(new SMAuthConfigurationReference(authProviderId, authProviderConfigurationId),
-                            securedUserIdentifyingCredentials),
+                        Map.of(
+                            new SMAuthConfigurationReference(authProviderId, authProviderConfigurationId),
+                            securedUserIdentifyingCredentials
+                        ),
                         isMainSession,
-                        forceSessionsLogout
+                        forceSessionsLogout,
+                        appSessionId
                     ),
                     true,
                     forceSessionsLogout
@@ -1615,6 +1840,23 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         } catch (SQLException e) {
             throw new DBException(e.getMessage(), e);
         }
+    }
+
+    @NotNull
+    protected String modifyOrigin(@NotNull String origin) {
+        StringBuilder finalOrigin = new StringBuilder();
+        URI uri = URI.create(origin);
+        finalOrigin.append(uri.getScheme())
+            .append("://")
+            .append(uri.getHost());
+        if (uri.getPort() > 0 && application.getServerPort() != uri.getPort()) {
+            finalOrigin.append(":").append(application.getServerPort());
+        } else {
+            return origin;
+        }
+        finalOrigin.append(uri.getPath());
+
+        return finalOrigin.toString();
     }
 
     private Map<String, Object> filterSecuredUserData(
@@ -1642,13 +1884,14 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         SMSessionType sessionType,
         Map<String, Object> sessionParameters,
         boolean isMainSession,
-        @Nullable String errorCode,
         boolean forceSessionsLogout
     ) throws DBException {
         String authAttemptId = UUID.randomUUID().toString();
         try (Connection dbCon = database.openConnection()) {
             try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
-                if (smConfig.isCheckBruteforce() && this.getAuthProvider(authProviderId).getInstance() instanceof SMBruteForceProtected bruteforceProtected) {
+                WebAuthProviderDescriptor authProviderDescriptor = getAuthProvider(authProviderId);
+                if (smConfig.isCheckBruteforce()
+                    && authProviderDescriptor.getInstance() instanceof SMBruteForceProtected bruteforceProtected) {
                     Object inputUsername = bruteforceProtected.getInputUsername(authData);
                     if (inputUsername != null) {
                         BruteForceUtils.checkBruteforce(smConfig,
@@ -1656,12 +1899,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     }
                 }
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames(
-                        "INSERT INTO {table_prefix}CB_AUTH_ATTEMPT" +
-                            "(AUTH_ID,AUTH_STATUS,APP_SESSION_ID,SESSION_TYPE,APP_SESSION_STATE," +
-                            "SESSION_ID,IS_MAIN_AUTH,AUTH_USERNAME,ERROR_CODE,FORCE_SESSION_LOGOUT) " +
-                            "VALUES(?,?,?,?,?,?,?,?,?,?)"
-                    )
+                    "INSERT INTO {table_prefix}CB_AUTH_ATTEMPT" +
+                        "(AUTH_ID,AUTH_STATUS,APP_SESSION_ID,SESSION_TYPE,APP_SESSION_STATE,"
+                        + "SESSION_ID,IS_MAIN_AUTH,AUTH_USERNAME,FORCE_SESSION_LOGOUT,IS_SERVICE_AUTH) "
+                        +
+                        "VALUES(?,?,?,?,?,?,?,?,?,?)"
                 )) {
                     dbStat.setString(1, authAttemptId);
                     dbStat.setString(2, status.toString());
@@ -1684,17 +1926,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     } else {
                         dbStat.setString(8, null);
                     }
-                    dbStat.setString(9, errorCode);
-                    dbStat.setString(10, forceSessionsLogout ? CHAR_BOOL_TRUE : CHAR_BOOL_FALSE);
+                    dbStat.setString(9, booleanToString(forceSessionsLogout));
+                    boolean isServiceAuth = isMainSession && authProviderDescriptor.isServiceProvider();
+                    dbStat.setString(10, booleanToString(isServiceAuth));
                     dbStat.execute();
                 }
 
                 try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames(
-                        "INSERT INTO {table_prefix}CB_AUTH_ATTEMPT_INFO" +
-                            "(AUTH_ID,AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE) " +
-                            "VALUES(?,?,?,?)"
-                    )
+                    "INSERT INTO {table_prefix}CB_AUTH_ATTEMPT_INFO" +
+                        "(AUTH_ID,AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE) " +
+                        "VALUES(?,?,?,?)"
                 )) {
                     dbStat.setString(1, authAttemptId);
                     dbStat.setString(2, authProviderId);
@@ -1713,18 +1954,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private List<UserLoginRecord> getLatestUserLogins(Connection dbCon, String authProviderId, String inputLogin) throws SQLException {
         List<UserLoginRecord> userLoginRecords = new ArrayList<>();
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames(
-                "SELECT" +
-                    "    attempt.AUTH_STATUS," +
-                    "    attempt.CREATE_TIME" +
-                    " FROM" +
-                    "    {table_prefix}CB_AUTH_ATTEMPT attempt" +
-                    "        JOIN" +
-                    "    {table_prefix}CB_AUTH_ATTEMPT_INFO info ON attempt.AUTH_ID = info.AUTH_ID" +
-                    " WHERE AUTH_PROVIDER_ID = ? AND AUTH_USERNAME = ? AND attempt.CREATE_TIME > ?" +
-                    " ORDER BY attempt.CREATE_TIME DESC " +
-                    database.getDialect().getOffsetLimitQueryPart(0, smConfig.getMaxFailedLogin())
-            )
+            "SELECT" +
+                "    attempt.AUTH_STATUS," +
+                "    attempt.CREATE_TIME" +
+                " FROM" +
+                "    {table_prefix}CB_AUTH_ATTEMPT attempt" +
+                "        JOIN" +
+                "    {table_prefix}CB_AUTH_ATTEMPT_INFO info ON attempt.AUTH_ID = info.AUTH_ID" +
+                " WHERE AUTH_PROVIDER_ID = ? AND AUTH_USERNAME = ? AND attempt.CREATE_TIME > ?" +
+                " ORDER BY attempt.CREATE_TIME DESC " +
+                database.getDialect().getOffsetLimitQueryPart(0, smConfig.getMaxFailedLogin())
         )) {
             dbStat.setString(1, authProviderId);
             dbStat.setString(2, inputLogin);
@@ -1762,6 +2001,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
         var authSessionInfo = readAuthAttemptSessionInfo(authId);
         updateAuthStatus(authId, authStatus, authInfo, error, authSessionInfo.getSmSessionId(), errorCode);
+        if (authStatus == SMAuthStatus.ERROR) {
+            SMAuthInfo errorInfo = getAuthStatus(authId, false);
+            application.getEventController().addEvent(
+                new WSAuthEvent(errorInfo)
+            );
+        }
     }
 
     private void updateAuthStatus(
@@ -1773,9 +2018,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         @Nullable String errorCode
     ) throws DBException {
         try (Connection dbCon = database.openConnection(); JDBCTransaction txn = new JDBCTransaction(dbCon)) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
+            try (PreparedStatement dbStat = dbCon.prepareStatement(
                 "UPDATE {table_prefix}CB_AUTH_ATTEMPT SET AUTH_STATUS=?,AUTH_ERROR=?,SESSION_ID=?,ERROR_CODE=? WHERE AUTH_ID=?"
-            ))) {
+            )) {
                 dbStat.setString(1, authStatus.toString());
                 JDBCUtils.setStringOrNull(dbStat, 2, error);
                 JDBCUtils.setStringOrNull(dbStat, 3, smSessionId);
@@ -1793,7 +2038,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 String sqlBuilder = "UPDATE {table_prefix}CB_AUTH_ATTEMPT_INFO SET AUTH_STATE=? " +
                                     "WHERE AUTH_ID=? AND AUTH_PROVIDER_ID=? AND " +
                                     (configIdExist ? "AUTH_PROVIDER_CONFIGURATION_ID=?" : "AUTH_PROVIDER_CONFIGURATION_ID IS NULL");
-                try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder))) {
+                try (PreparedStatement dbStat = dbCon.prepareStatement(sqlBuilder)) {
                     dbStat.setString(1, authJson);
                     dbStat.setString(2, authId);
                     dbStat.setString(3, providerId.getAuthProviderId());
@@ -1802,10 +2047,10 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     }
                     if (dbStat.executeUpdate() <= 0) {
                         try (PreparedStatement dbStatIns = dbCon.prepareStatement(
-                            database.normalizeTableNames("INSERT INTO {table_prefix}CB_AUTH_ATTEMPT_INFO " +
-                                "(AUTH_ID,AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE) "
-                                + "VALUES(?,?,?,?)")
-                        )) {
+                        "INSERT INTO {table_prefix}CB_AUTH_ATTEMPT_INFO " +
+                            "(AUTH_ID,AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE) "
+                            + "VALUES(?,?,?,?)")
+                        ) {
                             dbStatIns.setString(1, authId);
                             dbStatIns.setString(2, providerId.getAuthProviderId());
                             dbStatIns.setString(3, providerId.getAuthProviderConfigurationId());
@@ -1821,6 +2066,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
+    @NotNull
     @Override
     public SMAuthInfo getAuthStatus(@NotNull String authId) throws DBException {
         var smAuthInfo = getAuthStatus(authId, false);
@@ -1844,11 +2090,10 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             String errorCode;
             boolean forceSessionsLogout;
             boolean isMainAuth;
+            String appSessionId;
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT AUTH_STATUS,AUTH_ERROR,SESSION_ID,IS_MAIN_AUTH,ERROR_CODE,FORCE_SESSION_LOGOUT" +
-                            " FROM {table_prefix}CB_AUTH_ATTEMPT WHERE AUTH_ID=?"
-                )
+                "SELECT AUTH_STATUS,AUTH_ERROR,SESSION_ID,IS_MAIN_AUTH,ERROR_CODE,FORCE_SESSION_LOGOUT,APP_SESSION_ID" +
+                    " FROM {table_prefix}CB_AUTH_ATTEMPT WHERE AUTH_ID=?"
             )) {
                 dbStat.setString(1, authId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1861,6 +2106,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     isMainAuth = CHAR_BOOL_TRUE.equals(dbResult.getString(4));
                     errorCode = dbResult.getString(5);
                     forceSessionsLogout = CHAR_BOOL_TRUE.equals(dbResult.getString(6));
+                    appSessionId = dbResult.getString(7);
                 }
             }
             Map<SMAuthConfigurationReference, Object> authData = new LinkedHashMap<>();
@@ -1868,11 +2114,10 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             String signOutLink = null;
 
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE " +
-                        "FROM {table_prefix}CB_AUTH_ATTEMPT_INFO "
-                        + "WHERE AUTH_ID=? ORDER BY CREATE_TIME"
-                )
+                """
+                    SELECT AUTH_PROVIDER_ID,AUTH_PROVIDER_CONFIGURATION_ID,AUTH_STATE \
+                    FROM {table_prefix}CB_AUTH_ATTEMPT_INFO \
+                    WHERE AUTH_ID=? ORDER BY CREATE_TIME"""
             )) {
                 dbStat.setString(1, authId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -1884,13 +2129,18 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                             WebAuthProviderDescriptor authProviderDescriptor = getAuthProvider(authProviderId);
                             var authProviderInstance = authProviderDescriptor.getInstance();
                             if (authProviderInstance instanceof SMAuthProviderFederated providerFederated) {
-                                signInLink = buildRedirectLink(providerFederated.getRedirectLink(
-                                    authProviderConfiguration,
-                                    Map.of()), authId);
-                                signOutLink = providerFederated.getUserSignOutLink(
-                                    application.getAuthConfiguration()
-                                        .getAuthProviderConfiguration(authProviderConfiguration),
-                                    authProviderData);
+                                String userOrigin = JSONUtils.getString(authProviderData, SMConstants.USER_ORIGIN);
+                                if(CommonUtils.isNotEmpty(userOrigin)){
+                                    signInLink = buildRedirectLink(
+                                        providerFederated.getRedirectLink(authProviderConfiguration, Map.of(), userOrigin),
+                                        authId
+                                    );
+                                    signOutLink = providerFederated.getUserSignOutLink(
+                                        application.getAuthConfiguration()
+                                            .getAuthProviderConfiguration(authProviderConfiguration),
+                                        authProviderData, userOrigin
+                                    );
+                                }
                             }
 
                         }
@@ -1902,9 +2152,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             if (smAuthStatus != SMAuthStatus.SUCCESS) {
                 return switch (smAuthStatus) {
                     case IN_PROGRESS ->
-                        SMAuthInfo.inProgress(authId, signInLink, signOutLink, authData, isMainAuth, forceSessionsLogout);
-                    case ERROR -> SMAuthInfo.error(authId, authError, isMainAuth, errorCode);
-                    case EXPIRED -> SMAuthInfo.expired(authId, readExpiredData ? authData : Map.of(), isMainAuth);
+                        SMAuthInfo.inProgress(authId, signInLink, signOutLink, authData, isMainAuth, forceSessionsLogout, appSessionId);
+                    case ERROR -> SMAuthInfo.error(authId, authError, isMainAuth, errorCode, appSessionId);
+                    case EXPIRED -> SMAuthInfo.expired(authId, readExpiredData ? authData : Map.of(), isMainAuth, appSessionId);
                     default -> throw new SMException("Unknown auth status:" + smAuthStatus);
                 };
             }
@@ -1920,11 +2170,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     smTokens.getSmRefreshToken(),
                     authPermissions,
                     authData,
-                    authRole
+                    authRole,
+                    appSessionId
                 );
             } else {
                 //TODO remove permissions from child session
-                return SMAuthInfo.successChildSession(authId, authPermissions, authData);
+                return SMAuthInfo.successChildSession(authId, authPermissions, authData, appSessionId);
             }
         } catch (SQLException e) {
             throw new DBException("Error while read auth info", e);
@@ -1951,7 +2202,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             latestActiveSmTokens.getRefreshToken(),
             getTokenPermissions(latestActiveSmTokens.getAccessToken()),
             mergedData,
-            readTokenAuthRole(latestActiveSmTokens.getAccessToken())
+            readTokenAuthRole(latestActiveSmTokens.getAccessToken()),
+            appSessionId
         );
     }
 
@@ -1959,8 +2211,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
         try (var dbCon = database.openConnection()) {
             List<String> authAttemptIds = JDBCUtils.queryStrings(dbCon,
-                database.normalizeTableNames("SELECT AUTH_ID FROM {table_prefix}CB_AUTH_ATTEMPT " +
-                    "WHERE SESSION_ID=? AND AUTH_STATUS IN (?,?) ORDER BY CREATE_TIME"),
+                "SELECT AUTH_ID FROM {table_prefix}CB_AUTH_ATTEMPT " +
+                    "WHERE SESSION_ID=? AND AUTH_STATUS IN (?,?) ORDER BY CREATE_TIME",
                 smSessionId, SMAuthStatus.SUCCESS.name(), SMAuthStatus.EXPIRED.name()
             );
             List<SMAuthInfo> result = new ArrayList<>();
@@ -1984,7 +2236,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         var currentUserCreds = getCurrentUserCreds();
         var currentUserAccessToken = currentUserCreds.getSmAccessToken();
 
-        var smTokenInfo = readAccessTokenInfo(currentUserAccessToken);
+        SMTokenInfo smTokenInfo = readAccessTokenInfo(currentUserAccessToken);
 
         if (!smTokenInfo.getRefreshToken().equals(refreshToken)) {
             throw new SMException("Invalid refresh token");
@@ -1995,8 +2247,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             return generateNewSessionToken(
                 smTokenInfo.getSessionId(),
                 smTokenInfo.getUserId(),
-                updateUserAuthRoleIfNeeded(smTokenInfo.getUserId(), null),
-                dbCon);
+                updateUserAuthRoleIfNeeded(smTokenInfo.getUserId(), null), dbCon, smTokenInfo.isServiceToken()
+            );
         } catch (SQLException e) {
             throw new DBException("Error refreshing sm session", e);
         }
@@ -2005,7 +2257,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void invalidateUserTokens(String smToken) throws DBCException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(
-                dbCon, database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?"), smToken);
+                dbCon, "DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?", smToken);
         } catch (SQLException e) {
             throw new DBCException("Session invalidation failed", e);
         }
@@ -2015,7 +2267,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public void invalidateAllTokens() throws DBCException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(
-                dbCon, database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_TOKEN"));
+                dbCon, "DELETE FROM {table_prefix}CB_AUTH_TOKEN");
         } catch (SQLException e) {
             throw new DBCException("Session invalidation failed", e);
         }
@@ -2025,7 +2277,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void invalidateAllUserTokens(@NotNull String userId) throws DBCException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(
-                dbCon, database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE USER_ID=?"), userId);
+                dbCon, "DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE USER_ID=?", userId);
         } catch (SQLException e) {
             throw new DBCException("Session invalidation failed", e);
         }
@@ -2043,7 +2295,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private SMTokens findTokenBySmSession(String smSessionId) throws DBException {
         try (Connection dbCon = database.openConnection();
              PreparedStatement dbStat = dbCon.prepareStatement(
-                 database.normalizeTableNames("SELECT TOKEN_ID, REFRESH_TOKEN_ID FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID=?"))
+                 "SELECT TOKEN_ID, REFRESH_TOKEN_ID FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID=?")
         ) {
             dbStat.setString(1, smSessionId);
             try (var dbResult = dbStat.executeQuery()) {
@@ -2061,13 +2313,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private SMTokenInfo findTokenByAppSession(@NotNull String appSessionId) throws DBException {
         try (var dbCon = database.openConnection();
              var dbStat = dbCon.prepareStatement(
-                 database.normalizeTableNames(
-                     "SELECT CAT.TOKEN_ID FROM {table_prefix}CB_AUTH_TOKEN CAT " +
-                         "  JOIN {table_prefix}CB_SESSION CS ON CAT.SESSION_ID = CS.SESSION_ID " +
-                         "  WHERE CS.APP_SESSION_ID = ? AND CAT.USER_ID IS NOT NULL " +
-                         "  AND CAT.EXPIRATION_TIME > CURRENT_TIMESTAMP" +
-                         "  ORDER BY CAT.EXPIRATION_TIME DESC"
-                 )
+                 """
+                     SELECT CAT.TOKEN_ID FROM {table_prefix}CB_AUTH_TOKEN CAT \
+                       JOIN {table_prefix}CB_SESSION CS ON CAT.SESSION_ID = CS.SESSION_ID \
+                       WHERE CS.APP_SESSION_ID = ? AND CAT.USER_ID IS NOT NULL \
+                       AND CAT.EXPIRATION_TIME > CURRENT_TIMESTAMP\
+                       ORDER BY CAT.EXPIRATION_TIME DESC"""
              )
         ) {
             dbStat.setString(1, appSessionId);
@@ -2085,10 +2336,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
     private SMTokenInfo readAccessTokenInfo(String smAccessToken) throws DBException {
         try (Connection dbCon = database.openConnection();
-             PreparedStatement dbStat = dbCon.prepareStatement(
-                 database.normalizeTableNames("SELECT REFRESH_TOKEN_ID,SESSION_ID,USER_ID,REFRESH_TOKEN_EXPIRATION_TIME,AUTH_ROLE FROM " +
-                     "{table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?")
-             )
+            PreparedStatement dbStat = dbCon.prepareStatement(
+                """
+                    SELECT REFRESH_TOKEN_ID,SESSION_ID,USER_ID,REFRESH_TOKEN_EXPIRATION_TIME,AUTH_ROLE,IS_SERVICE\
+                     FROM {table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?"""
+            )
         ) {
             dbStat.setString(1, smAccessToken);
             try (var dbResult = dbStat.executeQuery()) {
@@ -2103,7 +2355,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 if (isTokenExpired(expiredDate)) {
                     throw new SMRefreshTokenExpiredException("Refresh token expired");
                 }
-                return new SMTokenInfo(smAccessToken, refreshToken, sessionId, userId, authRole);
+                boolean isService = stringToBoolean(dbResult.getString(6));
+                return new SMTokenInfo(smAccessToken, refreshToken, sessionId, userId, authRole, isService);
             }
         } catch (SQLException e) {
             throw new DBCException("Error reading token info in database", e);
@@ -2117,7 +2370,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     @Override
     public SMAuthInfo finishAuthentication(@NotNull String authId) throws DBException {
         SMAuthInfo authInfo = getAuthStatus(authId);
-        return finishAuthentication(authInfo, false, authInfo.isForceSessionsLogout());
+        SMAuthInfo finalAuthInfo = finishAuthentication(authInfo, false, authInfo.isForceSessionsLogout());
+        application.getEventController().addEvent(new WSAuthEvent(finalAuthInfo));
+        return finalAuthInfo;
     }
 
     protected SMAuthInfo finishAuthentication(
@@ -2201,7 +2456,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 if (userIdFromCreds == null) {
                     var error = "Invalid user credentials";
                     updateAuthStatus(authId, SMAuthStatus.ERROR, dbStoredUserData, error, null);
-                    return SMAuthInfo.error(authId, error, isMainAuthSession, null);
+                    return SMAuthInfo.error(authId, error, isMainAuthSession, null, authInfo.getAppSessionId());
                 }
 
                 if (autoAssign != null && !CommonUtils.isEmpty(autoAssign.getExternalTeamIds())) {
@@ -2213,6 +2468,16 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
                 if (activeUserId == null) {
                     activeUserId = userIdFromCreds;
+                }
+                if (autoAssign != null && CommonUtils.isNotEmpty(autoAssign.getAuthRoleAssignReason())) {
+                    log.info(activeUserId + " authenticated with role " + autoAssign.getAuthRole() + ", reason: " + autoAssign.getAuthRoleAssignReason());
+                }
+            } else {
+                SMAuthProvider<?> authProviderInstance = authProvider.getInstance();
+                if (!authProviderInstance.supportsOpeningSessionAsChild()) {
+                    var error = "Auth provider '" + authProviderId + "' doesn't support opening as a child session";
+                    updateAuthStatus(authId, SMAuthStatus.ERROR, dbStoredUserData, error, null);
+                    return SMAuthInfo.error(authId, error, isMainAuthSession, null, authInfo.getAppSessionId());
                 }
             }
             dbStoredUserData.put(
@@ -2227,6 +2492,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     ? providerAuthData
                     : filterSecuredUserData(providerAuthData, getAuthProvider(authProviderId))
             );
+            if (authProvider.getInstance() instanceof SMAuthProviderExternal<?> authProviderExternal) {
+                authProviderExternal.postAuthentication();
+            }
         }
 
         String tokenAuthRole = updateUserAuthRoleIfNeeded(activeUserId, detectedAuthRole);
@@ -2249,7 +2517,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     if (forceSessionsLogout && CommonUtils.isNotEmpty(activeUserId) && isMainAuthSession) {
                         killAllExistsUserSessions(activeUserId);
                     }
-                    smTokens = generateNewSessionToken(smSessionId, activeUserId, tokenAuthRole, dbCon);
+                    smTokens = generateNewSessionToken(
+                        smSessionId,
+                        activeUserId,
+                        tokenAuthRole,
+                        dbCon,
+                        authAttemptSessionInfo.isServiceAuth()
+                    );
 
                     permissions = new SMAuthPermissions(
                         activeUserId, smSessionId, getUserPermissions(activeUserId, tokenAuthRole)
@@ -2273,13 +2547,15 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 smTokens.getSmRefreshToken(),
                 permissions,
                 sentToUserAuthData,
-                tokenAuthRole
+                tokenAuthRole,
+                authInfo.getAppSessionId()
             );
         } else {
             return SMAuthInfo.successChildSession(
                 authId,
                 permissions,
-                sentToUserAuthData
+                sentToUserAuthData,
+                authInfo.getAppSessionId()
             );
         }
     }
@@ -2289,7 +2565,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         SMAutoAssign autoAssign,
         String userId,
         SMTeam[] allTeams
-    ) throws DBCException {
+    ) throws DBException {
         if (!(authProvider.getInstance() instanceof SMAuthProviderAssigner authProviderAssigner)) {
             return;
         }
@@ -2298,14 +2574,22 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         if (!CommonUtils.isEmpty(externalTeamIdMetadataFieldName)) {
             String[] newTeamIds = autoAssign.getExternalTeamIds()
                 .stream()
-                .map(externalTeamId -> findTeamByExternalTeamId(
+                .flatMap(externalTeamId -> findTeamByExternalTeamId(
                     allTeams,
                     externalTeamIdMetadataFieldName,
-                    externalTeamId
-                ))
-                .filter(Objects::nonNull)
+                    externalTeamId,
+                    authProvider.isCaseInsensitive()
+                ).stream())
                 .map(SMTeam::getTeamId)
                 .toArray(String[]::new);
+            SMUserTeam[] oldUserTeams = getUserTeams(userId);
+            Set<String> oldUserTeamIdSet = Arrays.stream(oldUserTeams).map(SMTeam::getTeamId).collect(Collectors.toSet());
+            oldUserTeamIdSet.remove(getDefaultUserTeam());
+            Set<String> newUserTeamIdSet = Arrays.stream(newTeamIds).collect(Collectors.toSet());
+            if (oldUserTeamIdSet.equals(newUserTeamIdSet)) {
+                //do not need to update teams and send events
+                return;
+            }
             if (!ArrayUtils.isEmpty(newTeamIds)) {
                 setUserTeams(
                     userId,
@@ -2330,24 +2614,35 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         return ((SMAuthProviderAssigner) authProviderInstance).detectAutoAssignments(monitor, providerConfig, userData);
     }
 
-    @Nullable
-    private SMTeam findTeamByExternalTeamId(SMTeam[] allTeams, String externalGroupParameterName, String groupId) {
+    @NotNull
+    private List<SMTeam> findTeamByExternalTeamId(
+        SMTeam[] allTeams,
+        String externalGroupParameterName,
+        String groupId,
+        boolean isCaseInsensitive
+    ) {
+        List<SMTeam> result = new ArrayList<>();
         for (SMTeam team : allTeams) {
             String teamGroupId = team.getMetaParameters().get(externalGroupParameterName);
-            if (CommonUtils.equalObjects(teamGroupId, groupId)) {
-                return team;
+            if (matchesGroupId(teamGroupId, groupId, isCaseInsensitive)) {
+                result.add(team);
             }
         }
-        return null;
+        return result;
+    }
+
+    private boolean matchesGroupId(String teamGroupId, String groupId, boolean isCaseInsensitive) {
+        if (isCaseInsensitive) {
+            return teamGroupId != null && teamGroupId.equalsIgnoreCase(groupId);
+        }
+        return CommonUtils.equalObjects(teamGroupId, groupId);
     }
 
 
     private String readProviderConfigId(String authAttemptId, String authProviderId) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT AUTH_PROVIDER_CONFIGURATION_ID " +
-                    "FROM {table_prefix}CB_AUTH_ATTEMPT_INFO "
-                    + "WHERE AUTH_ID=? AND AUTH_PROVIDER_ID=?")
+                "SELECT AUTH_PROVIDER_CONFIGURATION_ID FROM {table_prefix}CB_AUTH_ATTEMPT_INFO WHERE AUTH_ID=? AND AUTH_PROVIDER_ID=?"
             )) {
                 dbStat.setString(1, authAttemptId);
                 dbStat.setString(2, authProviderId);
@@ -2369,7 +2664,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     protected String readUserAuthRole(String userId) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("SELECT DEFAULT_AUTH_ROLE FROM {table_prefix}CB_USER WHERE USER_ID=?")
+                "SELECT DEFAULT_AUTH_ROLE FROM {table_prefix}CB_USER WHERE USER_ID=?"
             )) {
                 dbStat.setString(1, userId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -2400,9 +2695,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private AuthAttemptSessionInfo readAuthAttemptSessionInfo(@NotNull String authId) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames(
-                    "SELECT APP_SESSION_ID,SESSION_TYPE,APP_SESSION_STATE,SESSION_ID,IS_MAIN_AUTH " +
-                        "FROM {table_prefix}CB_AUTH_ATTEMPT WHERE AUTH_ID=?")
+                """
+                    SELECT APP_SESSION_ID,SESSION_TYPE,APP_SESSION_STATE,SESSION_ID,IS_MAIN_AUTH,IS_SERVICE_AUTH \
+                    FROM {table_prefix}CB_AUTH_ATTEMPT WHERE AUTH_ID=?"""
             )) {
                 dbStat.setString(1, authId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -2415,14 +2710,14 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                         dbResult.getString(3), MAP_STRING_OBJECT_TYPE
                     );
                     String smSessionId = dbResult.getString(4);
-                    boolean isMainAuth = CHAR_BOOL_TRUE.equals(dbResult.getString(5));
+                    boolean isMainAuth = stringToBoolean(dbResult.getString(5));
+                    boolean isServiceAuth = stringToBoolean(dbResult.getString(6));
 
                     return new AuthAttemptSessionInfo(
                         appSessionId,
                         smSessionId,
                         sessionType,
-                        sessionParams,
-                        isMainAuth
+                        sessionParams, isMainAuth, isServiceAuth
                     );
                 }
             }
@@ -2438,7 +2733,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         @NotNull DBRProgressMonitor progressMonitor,
         @Nullable String activeUserId,
         boolean createNewUserIfNotExist,
-        String authRole,
+        @Nullable String authRole,
         SMAuthProviderCustomConfiguration providerConfig
     ) throws DBException {
         SMAuthProvider<?> smAuthProviderInstance = authProvider.getInstance();
@@ -2464,17 +2759,12 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             userId = authProvider.isCaseInsensitive() ? userIdFromCredentials.toLowerCase() : userIdFromCredentials;
             if (!isSubjectExists(userId)) {
                 log.debug("Create user: " + userId);
-                try (Connection dbCon = database.openConnection()) {
-                    createUser(
-                        dbCon,
-                        userId,
-                        Map.of(),
-                        true,
-                        resolveUserAuthRole(null, authRole)
-                    );
-                } catch (SQLException e) {
-                    throw new DBException("Error saving user in database", e);
-                }
+                validateAndCreateUser(
+                    userId,
+                    (Map<String, String>) userCredentials.get(SMStandardMeta.KEY_META_PARAMS),
+                    true,
+                    resolveUserAuthRole(null, authRole)
+                );
             }
             setUserCredentials(userId, authProvider.getId(), userCredentials);
         } else if (userId == null) {
@@ -2505,21 +2795,48 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         @NotNull String smSessionId,
         @Nullable String userId,
         @Nullable String authRole,
-        @NotNull Connection dbCon
+        @NotNull Connection dbCon,
+        boolean isServiceToken
     ) throws SQLException, DBException {
         JDBCUtils.executeStatement(
-            dbCon, database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID=?"), smSessionId);
-        return generateNewSessionTokens(smSessionId, userId, authRole, dbCon);
+            dbCon, "DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID=?", smSessionId);
+        try (
+            PreparedStatement dbStat = dbCon.prepareStatement("INSERT INTO {table_prefix}CB_AUTH_TOKEN"
+                + "(TOKEN_ID,SESSION_ID,USER_ID,AUTH_ROLE,EXPIRATION_TIME,REFRESH_TOKEN_ID,REFRESH_TOKEN_EXPIRATION_TIME,IS_SERVICE) "
+                + "VALUES(?,?,?,?,?,?,?,?)")
+        ) {
+
+            String smAccessToken = SecurityUtils.generatePassword(32);
+            dbStat.setString(1, smAccessToken);
+            dbStat.setString(2, smSessionId);
+            JDBCUtils.setStringOrNull(dbStat, 3, userId);
+            JDBCUtils.setStringOrNull(dbStat, 4, authRole);
+            var accessTokenExpirationTime = Timestamp.valueOf(LocalDateTime.now().plusMinutes(smConfig.getAccessTokenTtl()));
+            dbStat.setTimestamp(5, accessTokenExpirationTime);
+
+            String smRefreshToken = SecurityUtils.generatePassword(32);
+            dbStat.setString(6, smRefreshToken);
+            var refreshTokenExpirationTime = Timestamp.valueOf(LocalDateTime.now().plusMinutes(smConfig.getRefreshTokenTtl()));
+            dbStat.setTimestamp(7, refreshTokenExpirationTime);
+            dbStat.setString(8, booleanToString(isServiceToken));
+
+            dbStat.execute();
+            return new SMTokens(smAccessToken, smRefreshToken);
+        }
     }
 
     protected void killAllExistsUserSessions(
-            @NotNull String userId
+        @NotNull String userId
     ) throws SQLException, DBException {
         LocalDateTime currentTime = LocalDateTime.now();
-        List<String> smSessionsId = findActiveUserSessions(userId, currentTime)
-                .stream().map(SMActiveSession::sessionId).collect(Collectors.toList());
-        deleteSessionsTokens(smSessionsId);
-        application.getEventController().addEvent(new WSUserCloseSessionsEvent(smSessionsId, getSmSessionId(), getUserId()));
+        List<String> smSessionsId = findActiveUserSessions(userId, currentTime, false)
+            .stream()
+            .map(SMActiveSession::sessionId)
+            .collect(Collectors.toList());
+        if (!smSessionsId.isEmpty()) {
+            deleteSessionsTokens(smSessionsId);
+            application.getEventController().addEvent(new WSUserCloseSessionsEvent(smSessionsId, getSmSessionId(), userId));
+        }
     }
 
     /**
@@ -2528,22 +2845,25 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     @NotNull
     public List<SMActiveSession> findActiveUserSessions(
             @NotNull String userId,
-            @NotNull LocalDateTime currentTime
+            @NotNull LocalDateTime currentTime,
+            boolean isService
     ) throws DBException {
         var activeSessions = new ArrayList<SMActiveSession>();
         try (var dbCon = database.openConnection()) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("SELECT DISTINCT CAT.SESSION_ID, CAT.EXPIRATION_TIME " +
-                            "FROM {table_prefix}CB_AUTH_TOKEN CAT " +
-                            "JOIN {table_prefix}CB_AUTH_ATTEMPT CAA ON CAA.SESSION_ID = CAT.SESSION_ID WHERE " +
-                            "CAT.USER_ID=? AND CAA.AUTH_STATUS=? AND CAT.EXPIRATION_TIME>? " +
-                            "ORDER BY CAT.EXPIRATION_TIME"
-                    ))
+            try (
+                PreparedStatement dbStat = dbCon.prepareStatement(
+                    "SELECT DISTINCT CAT.SESSION_ID, CAT.EXPIRATION_TIME " +
+                        "FROM {table_prefix}CB_AUTH_TOKEN CAT " +
+                        "JOIN {table_prefix}CB_AUTH_ATTEMPT CAA ON CAA.SESSION_ID = CAT.SESSION_ID WHERE " +
+                        "CAT.USER_ID=? AND CAA.AUTH_STATUS=? AND CAT.EXPIRATION_TIME>? AND CAT.IS_SERVICE=? " +
+                        "ORDER BY CAT.EXPIRATION_TIME"
+                    )
             ) {
                 dbStat.setString(1, userId);
                 //count only tokens actually used by users
                 dbStat.setString(2, SMAuthStatus.EXPIRED.name());
                 dbStat.setTimestamp(3, Timestamp.valueOf(currentTime));
+                dbStat.setString(4, booleanToString(isService));
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     while (dbResult.next()) {
                         var sessionId = dbResult.getString(1);
@@ -2561,7 +2881,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     private void deleteSessionsTokens(@NotNull List<String> sessionsId) throws DBException {
         try (var dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                    database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID = ?"))
+                    "DELETE FROM {table_prefix}CB_AUTH_TOKEN WHERE SESSION_ID = ?")
             ) {
                 for (String sessionId : sessionsId) {
                     dbStat.setString(1, sessionId);
@@ -2570,36 +2890,6 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             }
         } catch (SQLException e) {
             throw new DBException("Error delete active user's session", e);
-        }
-    }
-
-
-    private SMTokens generateNewSessionTokens(
-        @NotNull String smSessionId,
-        @Nullable String userId,
-        @Nullable String authRole,
-        @NotNull Connection dbCon
-    ) throws SQLException {
-        try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("INSERT INTO {table_prefix}CB_AUTH_TOKEN" +
-                "(TOKEN_ID,SESSION_ID,USER_ID,AUTH_ROLE,EXPIRATION_TIME,REFRESH_TOKEN_ID,REFRESH_TOKEN_EXPIRATION_TIME) " +
-                "VALUES(?,?,?,?,?,?,?)"))) {
-
-            String smAccessToken = SecurityUtils.generatePassword(32);
-            dbStat.setString(1, smAccessToken);
-            dbStat.setString(2, smSessionId);
-            JDBCUtils.setStringOrNull(dbStat, 3, userId);
-            JDBCUtils.setStringOrNull(dbStat, 4, authRole);
-            var accessTokenExpirationTime = Timestamp.valueOf(LocalDateTime.now().plusMinutes(smConfig.getAccessTokenTtl()));
-            dbStat.setTimestamp(5, accessTokenExpirationTime);
-
-            String smRefreshToken = SecurityUtils.generatePassword(32);
-            dbStat.setString(6, smRefreshToken);
-            var refreshTokenExpirationTime = Timestamp.valueOf(LocalDateTime.now().plusMinutes(smConfig.getRefreshTokenTtl()));
-            dbStat.setTimestamp(7, refreshTokenExpirationTime);
-
-            dbStat.execute();
-            return new SMTokens(smAccessToken, smRefreshToken);
         }
     }
 
@@ -2619,9 +2909,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         String authRole;
         try (Connection dbCon = database.openConnection();
              PreparedStatement dbStat = dbCon.prepareStatement(
-                 database.normalizeTableNames("""
+                 """
                      SELECT USER_ID, EXPIRATION_TIME, SESSION_ID, AUTH_ROLE FROM {table_prefix}CB_AUTH_TOKEN \
-                     WHERE TOKEN_ID=?"""))
+                     WHERE TOKEN_ID=?""")
         ) {
             dbStat.setString(1, token);
             try (var dbResult = dbStat.executeQuery()) {
@@ -2643,13 +2933,14 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         return new SMAuthPermissions(userId, sessionId, permissions);
     }
 
+    @NotNull
     @Override
     public SMAuthProviderDescriptor[] getAvailableAuthProviders() throws DBException {
-        WebAuthConfiguration appConfiguration = application.getAuthConfiguration();
+        ServletAuthConfiguration appConfiguration = application.getAuthConfiguration();
         Set<SMAuthProviderCustomConfiguration> customConfigurations = appConfiguration.getAuthCustomConfigurations();
         List<SMAuthProviderDescriptor> providers = WebAuthProviderRegistry.getInstance().getAuthProviders().stream()
             .filter(ap ->
-                !ap.isTrusted() &&
+                !ap.isTrusted() && !ap.isAuthHidden() &&
                     appConfiguration.isAuthProviderEnabled(ap.getId()) &&
                     (!ap.isConfigurable() || hasProviderConfiguration(ap, customConfigurations)))
             .map(WebAuthProviderDescriptor::createDescriptorBean).toList();
@@ -2684,9 +2975,10 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         String userId = getUserIdOrNull();
         try (Connection dbCon = database.openConnection()) {
             try (PreparedStatement dbStat = dbCon.prepareStatement(
-                database.normalizeTableNames("UPDATE {table_prefix}CB_SESSION " +
-                    "SET USER_ID=?,LAST_ACCESS_TIME=?,LAST_ACCESS_REMOTE_ADDRESS=?,LAST_ACCESS_USER_AGENT=?,LAST_ACCESS_INSTANCE_ID=? " +
-                    "WHERE SESSION_ID=?"))) {
+                """
+                    UPDATE {table_prefix}CB_SESSION \
+                    SET USER_ID=?,LAST_ACCESS_TIME=?,LAST_ACCESS_REMOTE_ADDRESS=?,LAST_ACCESS_USER_AGENT=?,LAST_ACCESS_INSTANCE_ID=? \
+                    WHERE SESSION_ID=?""")) {
                 JDBCUtils.setStringOrNull(dbStat, 1, userId);
                 dbStat.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
                 JDBCUtils.setStringOrNull(dbStat, 3, CommonUtils.truncateString(CommonUtils.toString(
@@ -2732,13 +3024,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     .append("AND OBJECT_ID IN (");
                 appendStringParameters(sqlBuilder, objectIds);
                 sqlBuilder.append(")");
-                JDBCUtils.executeStatement(dbCon, database.normalizeTableNames(sqlBuilder.toString()), objectType.name());
+                JDBCUtils.executeStatement(dbCon, sqlBuilder.toString(), objectType.name());
                 if (!CommonUtils.isEmpty(permissions)) {
                     try (PreparedStatement dbStat = dbCon.prepareStatement(
-                        database.normalizeTableNames(
-                            "INSERT INTO {table_prefix}CB_OBJECT_PERMISSIONS" +
-                                "(OBJECT_ID,OBJECT_TYPE,GRANT_TIME,GRANTED_BY,SUBJECT_ID,PERMISSION) "
-                                + "VALUES(?,?,?,?,?,?)"))) {
+                        """
+                            INSERT INTO {table_prefix}CB_OBJECT_PERMISSIONS\
+                            (OBJECT_ID,OBJECT_TYPE,GRANT_TIME,GRANTED_BY,SUBJECT_ID,PERMISSION) \
+                            VALUES(?,?,?,?,?,?)""")) {
                         for (String objectId : objectIds) {
                             dbStat.setString(1, objectId);
                             dbStat.setString(2, objectType.name());
@@ -2781,10 +3073,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         Set<String> filteredSubjects = getFilteredSubjects(subjectIds);
         try (Connection dbCon = database.openConnection();
              JDBCTransaction txn = new JDBCTransaction(dbCon);
-             PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
-                 "INSERT INTO {table_prefix}CB_OBJECT_PERMISSIONS" +
-                     "(OBJECT_ID,OBJECT_TYPE,GRANT_TIME,GRANTED_BY,SUBJECT_ID,PERMISSION) "
-                     + "VALUES(?,?,?,?,?,?)"))
+             PreparedStatement dbStat = dbCon.prepareStatement(
+                 """
+                     INSERT INTO {table_prefix}CB_OBJECT_PERMISSIONS\
+                     (OBJECT_ID,OBJECT_TYPE,GRANT_TIME,GRANTED_BY,SUBJECT_ID,PERMISSION) \
+                     VALUES(?,?,?,?,?,?)""")
         ) {
             for (String objectId : objectIds) {
                 dbStat.setString(1, objectId);
@@ -2831,7 +3124,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
         try (
             Connection dbCon = database.openConnection();
-            PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sql))
+            PreparedStatement dbStat = dbCon.prepareStatement(sql)
         ) {
             int index = 1;
             dbStat.setString(index++, objectType.name());
@@ -2852,7 +3145,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     }
 
 
-    private void addSubjectPermissionsUpdateEvent(@NotNull String subjectId, @Nullable SMSubjectType subjectType) {
+    protected void addSubjectPermissionsUpdateEvent(@NotNull String subjectId, @Nullable SMSubjectType subjectType) {
         if (subjectType == null) {
             subjectType = getSubjectType(subjectId);
         }
@@ -2860,13 +3153,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             log.error("Subject type is not found for subject '" + subjectId + "'");
             return;
         }
-        var event = WSSubjectPermissionEvent.update(
-            getSmSessionId(),
-            getUserId(),
-            subjectType,
-            subjectId
-        );
-        application.getEventController().addEvent(event);
+        WebEventUtils.addSubjectPermissionsUpdateEvent(subjectId, subjectType, getSmSessionId(), getUserId());
     }
 
     private void addObjectPermissionsUpdateEvent(@NotNull Set<String> objectIds, @NotNull SMObjectType objectType) {
@@ -2897,7 +3184,13 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public void deleteAllObjectPermissions(@NotNull String objectId, @NotNull SMObjectType objectType) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(dbCon,
-                database.normalizeTableNames("DELETE FROM {table_prefix}CB_OBJECT_PERMISSIONS WHERE OBJECT_TYPE=? AND OBJECT_ID=?"),
+                "DELETE FROM {table_prefix}CB_OBJECT_PERMISSIONS WHERE OBJECT_TYPE=? AND OBJECT_ID=?",
+                objectType.name(),
+                objectId
+            );
+            JDBCUtils.executeStatement(
+                dbCon,
+                "DELETE FROM {table_prefix}CB_OBJECT_SETTINGS WHERE OBJECT_TYPE=? AND OBJECT_ID=?",
                 objectType.name(),
                 objectId
             );
@@ -2922,7 +3215,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             "WHERE TEAM_ID IN (SELECT TEAM_ID FROM {table_prefix}CB_USER_TEAM WHERE USER_ID = ? and TEAM_ROLE = ?) " +
             "AND UT.USER_ID IN(" + SQLUtils.generateParamList(userIds.size()) + ")";
         try (var dbCon = database.openConnection();
-             var dbStat = dbCon.prepareStatement(database.normalizeTableNames(sql))
+             var dbStat = dbCon.prepareStatement(sql)
         ) {
             dbStat.setString(1, currentUserId);
             dbStat.setString(2, teamRole);
@@ -2947,7 +3240,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public void deleteAllSubjectObjectPermissions(@NotNull String subjectId, @NotNull SMObjectType objectType) throws DBException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(dbCon,
-                database.normalizeTableNames("DELETE FROM {table_prefix}CB_OBJECT_PERMISSIONS WHERE OBJECT_TYPE=? AND SUBJECT_ID=?"),
+                "DELETE FROM {table_prefix}CB_OBJECT_PERMISSIONS WHERE OBJECT_TYPE=? AND SUBJECT_ID=?",
                 objectType.name(),
                 subjectId
             );
@@ -2980,7 +3273,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 sqlBuilder.append("WHERE SUBJECT_ID IN (");
                 appendStringParameters(sqlBuilder, allSubjects);
                 sqlBuilder.append(") AND OBJECT_TYPE=?");
-                try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder.toString()))) {
+                try (PreparedStatement dbStat = dbCon.prepareStatement(sqlBuilder.toString())) {
                     dbStat.setString(1, objectType.name());
 
                     var permissionsByObjectId = new LinkedHashMap<String, Set<String>>();
@@ -3016,7 +3309,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                 appendStringParameters(sqlBuilder, allSubjects);
                 sqlBuilder.append(") AND OBJECT_TYPE=? AND OBJECT_ID=?");
 
-                try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder.toString()))) {
+                try (PreparedStatement dbStat = dbCon.prepareStatement(sqlBuilder.toString())) {
                     dbStat.setString(1, objectType.name());
                     dbStat.setString(2, objectId);
 
@@ -3042,11 +3335,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     ) throws DBException {
         var grantedPermissionsBySubjectId = new HashMap<String, SMObjectPermissionsGrant.Builder>();
         try (Connection dbCon = database.openConnection()) {
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(
+            try (PreparedStatement dbStat = dbCon.prepareStatement(
                 """
                     SELECT OP.SUBJECT_ID,S.SUBJECT_TYPE, OP.PERMISSION
                     FROM {table_prefix}CB_OBJECT_PERMISSIONS OP, {table_prefix}CB_AUTH_SUBJECT S
-                    WHERE S.SUBJECT_ID = OP.SUBJECT_ID AND OP.OBJECT_TYPE=? AND OP.OBJECT_ID=?"""))) {
+                    WHERE S.SUBJECT_ID = OP.SUBJECT_ID AND OP.OBJECT_TYPE=? AND OP.OBJECT_ID=?""")) {
                 dbStat.setString(1, smObjectType.name());
                 dbStat.setString(2, objectId);
                 try (ResultSet dbResult = dbStat.executeQuery()) {
@@ -3081,7 +3374,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
                     .append("WHERE S.SUBJECT_ID = OP.SUBJECT_ID AND OP.SUBJECT_ID IN (");
             appendStringParameters(sqlBuilder, allLinkedSubjects);
             sqlBuilder.append(") AND OP.OBJECT_TYPE=?");
-            try (PreparedStatement dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder.toString()))) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(sqlBuilder.toString())) {
                 dbStat.setString(1, smObjectType.name());
                 try (ResultSet dbResult = dbStat.executeQuery()) {
                     while (dbResult.next()) {
@@ -3131,8 +3424,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
     protected String readTokenAuthRole(String smAccessToken) throws DBException {
         try (Connection dbCon = database.openConnection();
-             PreparedStatement dbStat = dbCon.prepareStatement(
-                 database.normalizeTableNames("SELECT AUTH_ROLE FROM {table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?"))
+             PreparedStatement dbStat = dbCon.prepareStatement("SELECT AUTH_ROLE FROM {table_prefix}CB_AUTH_TOKEN WHERE TOKEN_ID=?")
         ) {
             dbStat.setString(1, smAccessToken);
             try (var dbResult = dbStat.executeQuery()) {
@@ -3153,9 +3445,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         boolean secretStorage
     ) throws SQLException {
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames(
-                "INSERT INTO {table_prefix}CB_AUTH_SUBJECT(SUBJECT_ID,SUBJECT_TYPE,IS_SECRET_STORAGE) " +
-                    "VALUES (?,?,?)"))) {
+            "INSERT INTO {table_prefix}CB_AUTH_SUBJECT(SUBJECT_ID,SUBJECT_TYPE,IS_SECRET_STORAGE) " +
+                "VALUES (?,?,?)")) {
             dbStat.setString(1, subjectId);
             dbStat.setString(2, subjectType.getCode());
             dbStat.setString(3, booleanToString(secretStorage));
@@ -3173,7 +3464,8 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
 
     private void deleteAuthSubject(Connection dbCon, String subjectId) throws SQLException {
         try (PreparedStatement dbStat = dbCon.prepareStatement(
-            database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_SUBJECT WHERE SUBJECT_ID=?"))) {
+            "DELETE FROM {table_prefix}CB_AUTH_SUBJECT WHERE SUBJECT_ID=?")
+        ) {
             dbStat.setString(1, subjectId);
             dbStat.execute();
         }
@@ -3188,7 +3480,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         return authProvider;
     }
 
-    private String buildRedirectLink(String originalLink, String authId) {
+    private String buildRedirectLink(@NotNull String originalLink, @NotNull String authId) {
         return originalLink + "?authId=" + authId;
     }
 
@@ -3212,7 +3504,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     }
 
     private boolean isProviderDisabled(@NotNull String providerId, @Nullable String authConfigurationId) {
-        WebAuthConfiguration appConfiguration = application.getAuthConfiguration();
+        ServletAuthConfiguration appConfiguration = application.getAuthConfiguration();
         if (!appConfiguration.isAuthProviderEnabled(providerId)) {
             return true;
         }
@@ -3227,14 +3519,14 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     public void clearOldAuthAttemptInfo() throws DBException {
         try (Connection dbCon = database.openConnection()) {
             JDBCUtils.executeStatement(dbCon,
-                database.normalizeTableNames("DELETE FROM {table_prefix}CB_AUTH_ATTEMPT_INFO " +
+                "DELETE FROM {table_prefix}CB_AUTH_ATTEMPT_INFO " +
                     "WHERE EXISTS " +
                     "(SELECT 1 FROM {table_prefix}CB_AUTH_ATTEMPT AA " +
                     "LEFT JOIN {table_prefix}CB_AUTH_TOKEN CAT ON AA.SESSION_ID = CAT.SESSION_ID " +
                     "WHERE (CAT.REFRESH_TOKEN_EXPIRATION_TIME < ? OR CAT.EXPIRATION_TIME IS NULL) " +
                     "AND AA.AUTH_ID={table_prefix}CB_AUTH_ATTEMPT_INFO.AUTH_ID " +
                     "AND AUTH_STATUS='" + SMAuthStatus.EXPIRED + "') " +
-                    "AND CREATE_TIME<?"),
+                    "AND CREATE_TIME<?",
                 Timestamp.valueOf(LocalDateTime.now()),
                 Timestamp.valueOf(LocalDateTime.now().minusMinutes(smConfig.getExpiredAuthAttemptInfoTtl()))
             );
@@ -3249,7 +3541,7 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
             String sqlBuilder =
                 "SELECT SUBJECT_ID FROM {table_prefix}CB_AUTH_SUBJECT U " +
                 "WHERE SUBJECT_ID IN (" + SQLUtils.generateParamList(allSubjects.size()) + ")";
-            try (var dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder))) {
+            try (var dbStat = dbCon.prepareStatement(sqlBuilder)) {
                 int parameterIndex = 1;
                 for (String subjectId : allSubjects) {
                     dbStat.setString(parameterIndex++, subjectId);
@@ -3267,18 +3559,9 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
         }
     }
 
-    private SMSubjectType getSubjectType(@NotNull String subjectId) {
+    protected SMSubjectType getSubjectType(@NotNull String subjectId) {
         try (Connection dbCon = database.openConnection()) {
-            String sqlBuilder = "SELECT SUBJECT_TYPE FROM {table_prefix}CB_AUTH_SUBJECT U WHERE SUBJECT_ID = ?";
-            try (var dbStat = dbCon.prepareStatement(database.normalizeTableNames(sqlBuilder))) {
-                dbStat.setString(1, subjectId);
-                try (ResultSet dbResult = dbStat.executeQuery()) {
-                    if (dbResult.next()) {
-                        return SMSubjectType.fromCode(dbResult.getString(1));
-                    }
-                }
-            }
-            return null;
+            return CBAuthSubjectRepo.getInstance().getSubjectType(dbCon, subjectId);
         } catch (SQLException e) {
             log.error("Error getting all subject ids from database", e);
             return null;
@@ -3300,5 +3583,11 @@ public class CBEmbeddedSecurityController<T extends WebAuthApplication>
     @NotNull
     private String getDefaultUserTeam() {
         return application.getAppConfiguration().getDefaultUserTeam();
+    }
+
+    @NotNull
+    @Override
+    public DBPConnectionInformation getInternalDatabaseInformation() {
+        return database.getMetaDataInfo();
     }
 }

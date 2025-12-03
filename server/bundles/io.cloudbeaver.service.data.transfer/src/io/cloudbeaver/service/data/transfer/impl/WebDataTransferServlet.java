@@ -18,7 +18,7 @@ package io.cloudbeaver.service.data.transfer.impl;
 
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.model.session.WebSession;
-import io.cloudbeaver.server.CBApplication;
+import io.cloudbeaver.server.WebApplication;
 import io.cloudbeaver.service.WebServiceServletBase;
 import io.cloudbeaver.service.data.transfer.DBWServiceDataTransfer;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,13 +28,8 @@ import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.tools.transfer.registry.DataTransferProcessorDescriptor;
 import org.jkiss.dbeaver.tools.transfer.registry.DataTransferRegistry;
 import org.jkiss.utils.CommonUtils;
-import org.jkiss.utils.IOUtils;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
 
 public class WebDataTransferServlet extends WebServiceServletBase {
 
@@ -42,7 +37,7 @@ public class WebDataTransferServlet extends WebServiceServletBase {
 
     private final DBWServiceDataTransfer dtManager;
 
-    public WebDataTransferServlet(CBApplication application, DBWServiceDataTransfer dtManager) {
+    public WebDataTransferServlet(WebApplication application, DBWServiceDataTransfer dtManager) {
         super(application);
         this.dtManager = dtManager;
     }
@@ -73,20 +68,10 @@ public class WebDataTransferServlet extends WebServiceServletBase {
             fileName = taskInfo.getDataFileId();
         }
         fileName = WebDataTransferUtils.normalizeFileName(fileName, taskInfo.getParameters().getOutputSettings());
-        Path dataFile = taskInfo.getDataFile();
         session.addInfoMessage("Download data ...");
         response.setHeader("Content-Type", processor.getContentType());
         response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
-        response.setHeader("Content-Length", String.valueOf(Files.size(dataFile)));
 
-        try (InputStream is = Files.newInputStream(dataFile)) {
-            IOUtils.copyStream(is, response.getOutputStream());
-        }
-
-        // TODO: cleanup export files ASAP?
-        if (false) {
-            dtConfig.removeTask(taskInfo);
-        }
+        dtManager.exportDataTransferToStream(session.getProgressMonitor(), taskInfo, response.getOutputStream());
     }
-
 }

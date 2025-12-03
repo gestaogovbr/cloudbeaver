@@ -1,140 +1,51 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 
-import { Combobox, FieldCheckbox, InputField, Textarea, useCustomInputValidation, useTranslate } from '@cloudbeaver/core-blocks';
-import { useService } from '@cloudbeaver/core-di';
-import {
-  ESettingsValueType,
-  type ISettingDescription,
-  type ISettingsSource,
-  SettingsProviderService,
-  SettingsResolverService,
-} from '@cloudbeaver/core-settings';
-import { isNotNullDefined, schemaValidationError } from '@cloudbeaver/core-utils';
+import { Link, useTranslate } from '@cloudbeaver/core-blocks';
+import { clsx } from '@dbeaver/ui-kit';
+import { type ISettingDescription, type IEditableSettingsSource, type ISettingsResolverSource } from '@cloudbeaver/core-settings';
+import { SettingField } from './SettingField.js';
 
 interface Props {
-  source: ISettingsSource;
+  resolver: ISettingsResolverSource;
+  source: IEditableSettingsSource;
   setting: ISettingDescription;
+  displayRestore?: boolean;
 }
 
-export const Setting = observer<Props>(function Setting({ source, setting }) {
-  const settingsResolverService = useService(SettingsResolverService);
-  const settingsProviderService = useService(SettingsProviderService);
+export const Setting = observer<Props>(function Setting({ resolver, source, setting, displayRestore }) {
   const translate = useTranslate();
+  // DODO: hide this logic until we have more than one scope
+  const isOverride = source.has(setting.key) && source.getEditedValue(setting.key) !== null && displayRestore;
 
-  const name = translate(setting.name);
-  const description = translate(setting.description);
-  const disabled = false;
-  const readOnly = settingsResolverService.isReadOnly(setting.key) ?? false;
-
-  let value = source.getEditedValue(setting.key);
-  if (readOnly || !isNotNullDefined(value)) {
-    value = settingsResolverService.getEditedValue(setting.key);
-  }
-
-  if (setting.key in settingsProviderService.schema.shape) {
-    const schema = settingsProviderService.schema.shape[setting.key];
-    if (!isNotNullDefined(value)) {
-      const result = schema.safeParse(undefined);
-      value = result.success ? result.data : '';
-    }
-
-    const result = schema.safeParse(value);
-    value = result.success ? result.data : value;
-  }
-
-  value = value ?? '';
-
-  const customValidation = useCustomInputValidation(value => {
-    if (!(setting.key in settingsProviderService.schema.shape)) {
-      return null;
-    }
-    const result = settingsProviderService.schema.shape[setting.key].safeParse(value);
-
-    if (result.success) {
-      return null;
-    }
-
-    return schemaValidationError(result.error, { prefix: null }).toString();
-  });
-
-  function handleChange(value: any) {
-    source.setValue(setting.key, value);
-  }
-
-  if (setting.type === ESettingsValueType.Checkbox) {
-    return (
-      <FieldCheckbox
-        id={String(setting.key)}
-        checked={value}
-        label={name}
-        title={name}
-        caption={description}
-        disabled={disabled}
-        readOnly={readOnly}
-        groupGap
-        onChange={handleChange}
-      />
-    );
-  }
-
-  if (setting.type === ESettingsValueType.Select) {
-    const options = setting.options?.map(option => ({ ...option, name: translate(option.name) })) || [];
-    return (
-      <Combobox
-        id={String(setting.key)}
-        items={options}
-        keySelector={value => value.value}
-        valueSelector={value => value.name}
-        value={value}
-        title={name}
-        disabled={disabled}
-        readOnly={readOnly}
-        description={description}
-        small
-        onSelect={handleChange}
-      >
-        {name}
-      </Combobox>
-    );
-  }
-
-  if (setting.type === ESettingsValueType.Textarea) {
-    return (
-      <Textarea
-        id={String(setting.key)}
-        title={value}
-        labelTooltip={description}
-        value={value}
-        disabled={disabled}
-        readOnly={readOnly}
-        onChange={handleChange}
-      >
-        {name}
-      </Textarea>
-    );
+  function handleRestore() {
+    source.resetValue(setting.key);
   }
 
   return (
-    <InputField
-      ref={customValidation}
-      id={String(setting.key)}
-      type="text"
-      title={value}
-      labelTooltip={description}
-      value={value}
-      description={description}
-      readOnly={readOnly || disabled}
-      small
-      onChange={handleChange}
-    >
-      {name}
-    </InputField>
+    <div className="tw:flex tw:relative tw:gap-2">
+      <div className="tw:w-1 tw:h-full" hidden={!displayRestore}>
+        {isOverride && (
+          <div
+            className={clsx('tw:h-full tw:w-full tw:bg-zinc-100 tw:dark:bg-zinc-700')}
+            title={translate('plugin_settings_panel_setting_set_in_scope')}
+          />
+        )}
+      </div>
+      <div>
+        <SettingField resolver={resolver} setting={setting} source={source} />
+        {isOverride && (
+          <Link className="theme-typography--caption" title={translate('plugin_settings_panel_setting_reset_tooltip')} onClick={handleRestore}>
+            {translate('plugin_settings_panel_setting_reset')}
+          </Link>
+        )}
+      </div>
+    </div>
   );
 });

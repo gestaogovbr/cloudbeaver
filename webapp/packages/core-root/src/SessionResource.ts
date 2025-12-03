@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@ import { CachedDataResource } from '@cloudbeaver/core-resource';
 import { GraphQLService, type SessionStateFragment } from '@cloudbeaver/core-sdk';
 
 import { ServerConfigResource } from './ServerConfigResource.js';
-import { ServerEventId } from './SessionEventSource.js';
+import { ServerEventId, SessionEventSource } from './SessionEventSource.js';
 import { type ISessionStateEvent, SessionInfoEventHandler } from './SessionInfoEventHandler.js';
 
 export type SessionState = SessionStateFragment;
@@ -20,12 +20,13 @@ export interface ISessionAction {
   [key: string]: any;
 }
 
-@injectable()
+@injectable(() => [GraphQLService, SessionEventSource, SessionInfoEventHandler, ServerConfigResource, LocalizationService])
 export class SessionResource extends CachedDataResource<SessionState | null> {
   private action: ISessionAction | null;
 
   constructor(
     private readonly graphQLService: GraphQLService,
+    sessionEventSource: SessionEventSource,
     private readonly sessionInfoEventHandler: SessionInfoEventHandler,
     serverConfigResource: ServerConfigResource,
     private readonly localizationService: LocalizationService,
@@ -34,6 +35,7 @@ export class SessionResource extends CachedDataResource<SessionState | null> {
 
     this.handleSessionStateEvent = this.handleSessionStateEvent.bind(this);
 
+    sessionEventSource.onActivate.addHandler(() => this.load());
     sessionInfoEventHandler.onEvent(ServerEventId.CbSessionState, this.handleSessionStateEvent, undefined, this);
 
     this.action = null;
@@ -74,14 +76,17 @@ export class SessionResource extends CachedDataResource<SessionState | null> {
 
   async changeLanguage(locale: string): Promise<void> {
     await this.load();
-    if (this.data?.locale === locale) {
-      return;
-    }
-    await this.graphQLService.sdk.changeSessionLanguage({ locale });
 
-    if (this.data) {
-      this.data.locale = locale;
-    }
+    this.performUpdate(undefined, [], async () => {
+      if (this.data?.locale === locale) {
+        return;
+      }
+      await this.graphQLService.sdk.changeSessionLanguage({ locale });
+
+      if (this.data) {
+        this.data.locale = locale;
+      }
+    });
 
     this.markOutdated();
   }

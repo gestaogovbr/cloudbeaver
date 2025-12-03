@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,12 +9,12 @@ import { makeObservable, observable } from 'mobx';
 
 import { UserInfoResource } from '@cloudbeaver/core-authentication';
 import { injectable } from '@cloudbeaver/core-di';
-import { SettingsSource } from '@cloudbeaver/core-settings';
+import { EditableSettingsSource } from '@cloudbeaver/core-settings';
 import { StorageService } from '@cloudbeaver/core-storage';
 import { isNull } from '@cloudbeaver/core-utils';
 
-@injectable()
-export class UserSettingsService extends SettingsSource {
+@injectable(() => [UserInfoResource, StorageService])
+export class UserSettingsService extends EditableSettingsSource {
   private readonly settings: Map<string, any>;
   private lastConfig: any;
   private localSettings: Map<string, any>;
@@ -47,6 +47,10 @@ export class UserSettingsService extends SettingsSource {
 
   override has(key: any): boolean {
     return this.getSource().has(key) || super.has(key);
+  }
+
+  isOverrideDefaults(): boolean {
+    return this.getSource().size > 0;
   }
 
   isReadOnly(key: any): boolean {
@@ -84,7 +88,7 @@ export class UserSettingsService extends SettingsSource {
   restoreDefaults() {
     this.resetChanges();
     for (const key of this.getSource().keys()) {
-      this.setValue(key, null);
+      this.resetValue(key);
     }
   }
 

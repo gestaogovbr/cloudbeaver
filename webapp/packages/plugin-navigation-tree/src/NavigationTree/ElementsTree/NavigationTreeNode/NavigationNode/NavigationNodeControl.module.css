@@ -29,9 +29,12 @@
 
 .treeNodeName {
   height: 100%;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.treeNodeName.temporary {
+  font-style: italic;
 }
 
 .portal {

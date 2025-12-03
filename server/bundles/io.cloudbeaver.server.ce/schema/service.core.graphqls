@@ -1,0 +1,22 @@
+extend type ServerConfig {
+    serverURL: String! @deprecated
+    rootURI: String!
+    hostName: String! @deprecated(reason: "use container id instead")
+    containerId: String!
+    defaultAuthRole: String
+    defaultUserTeam: String # [23.2.2]
+
+    sessionExpireTime: Int!
+    localHostAddress: String
+
+    redirectOnFederatedAuth: Boolean!
+    enabledAuthProviders: [ID!]!
+    passwordPolicyConfiguration: PasswordPolicyConfig! @since(version: "23.3.3")
+    "Mark all cookies as secure, recommend for HTTPS deployment configurations"
+    forceHttps: Boolean! @since(version: "25.1.3")
+    "List of allowed hosts to use the application - if empty, all hosts are allowed"
+    supportedHosts: [String!]! @since(version: "25.1.3")
+    "Indicates whether the session should be linked to the user's IP address"
+    bindSessionToIp: String! @since(version: "25.1.4")
+}
+

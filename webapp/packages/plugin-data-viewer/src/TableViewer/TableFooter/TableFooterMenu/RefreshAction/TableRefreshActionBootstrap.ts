@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ import { LocalizationService } from '@cloudbeaver/core-localization';
 import { declensionOfNumber } from '@cloudbeaver/core-utils';
 import { ACTION_REFRESH, ActionService, MenuBaseItem, menuExtractItems, MenuSeparatorItem, MenuService } from '@cloudbeaver/core-view';
 
-import { type IDatabaseRefreshState } from '../../../../DatabaseDataModel/Actions/DatabaseRefreshAction.js';
+import { type IDatabaseRefreshState } from '../../../../DatabaseDataModel/Actions/General/DatabaseRefreshAction.js';
 import { DATA_CONTEXT_DV_DDM } from '../../../../DatabaseDataModel/DataContext/DATA_CONTEXT_DV_DDM.js';
 import { DATA_CONTEXT_DV_DDM_RESULT_INDEX } from '../../../../DatabaseDataModel/DataContext/DATA_CONTEXT_DV_DDM_RESULT_INDEX.js';
 import { DATA_VIEWER_DATA_MODEL_ACTIONS_MENU } from '../DATA_VIEWER_DATA_MODEL_ACTIONS_MENU.js';
@@ -28,7 +28,7 @@ const AutoRefreshSettingsDialog = importLazyComponent(() =>
 
 const AUTO_REFRESH_INTERVALS = [5, 10, 15, 30, 60];
 
-@injectable()
+@injectable(() => [ActionService, MenuService, LocalizationService, CommonDialogService])
 export class TableRefreshActionBootstrap extends Bootstrap {
   constructor(
     private readonly actionService: ActionService,
@@ -142,7 +142,7 @@ export class TableRefreshActionBootstrap extends Bootstrap {
           const state = getRefreshState(context);
           return {
             ...action.info,
-            icon: state?.isAutoRefresh ? '/icons/timer_m.svg#root' : '/icons/refresh_m.svg#root',
+            icon: state?.isAutoRefresh ? '/icons/timer_m.svg#root' : '/icons/refresh_sm.svg',
             label: '',
             tooltip: state?.isAutoRefresh ? 'data_viewer_action_auto_refresh_stop_tooltip' : 'data_viewer_action_refresh_tooltip',
           };
@@ -175,9 +175,9 @@ export class TableRefreshActionBootstrap extends Bootstrap {
       stopOnError: state.stopOnError,
     });
 
-    const result = await this.commonDialogService.open(AutoRefreshSettingsDialog, { state: stateCopy });
+    const { status } = await this.commonDialogService.open(AutoRefreshSettingsDialog, { state: stateCopy });
 
-    if (result === DialogueStateResult.Resolved) {
+    if (status === DialogueStateResult.Resolved) {
       let interval = stateCopy.interval;
 
       if (typeof interval === 'string') {

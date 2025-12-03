@@ -1,236 +1,226 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { injectable } from '@cloudbeaver/core-di';
 import {
+  ACTION_EDIT,
+  ActionService,
+  getBindingLabel,
+  KEY_BINDING_ADD,
+  KEY_BINDING_DUPLICATE,
+  MenuService,
+  type IAction,
+} from '@cloudbeaver/core-view';
+import {
+  DATA_CONTEXT_DV_DDM,
+  DATA_CONTEXT_DV_DDM_RESULT_INDEX,
+  DATA_CONTEXT_DV_PRESENTATION_ACTIONS,
+  DATA_CONTEXT_DV_RESULT_KEY,
   DatabaseEditChangeType,
+  GridEditAction,
+  GridSelectAction,
+  GridViewAction,
+  IDatabaseDataEditAction,
+  IDatabaseDataFormatAction,
+  IDatabaseDataSelectAction,
+  IDatabaseDataViewAction,
   isBooleanValuePresentationAvailable,
   isResultSetDataSource,
   ResultSetDataContentAction,
-  ResultSetDataSource,
-  ResultSetEditAction,
-  ResultSetFormatAction,
-  ResultSetSelectAction,
-  ResultSetViewAction,
+  type IDatabaseValueHolder,
+  type IGridDataKey,
+  type IResultSetValue,
 } from '@cloudbeaver/plugin-data-viewer';
+import type { IDataContextProvider } from '@cloudbeaver/core-data-context';
+import { LocalizationService } from '@cloudbeaver/core-localization';
 
-import { DataGridContextMenuService } from './DataGridContextMenuService.js';
+import { ACTION_DATA_GRID_EDITING_ADD_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_ADD_ROW.js';
+import { ACTION_DATA_GRID_EDITING_DELETE_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_DELETE_ROW.js';
+import { ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW.js';
+import { ACTION_DATA_GRID_EDITING_DUPLICATE_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_DUPLICATE_ROW.js';
+import { ACTION_DATA_GRID_EDITING_REVERT_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_REVERT_ROW.js';
+import { ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW.js';
+import { ACTION_DATA_GRID_EDITING_SET_TO_NULL } from '../Actions/Editing/ACTION_DATA_GRID_EDITING_SET_TO_NULL.js';
+import { MENU_DATA_GRID_EDITING } from './MENU_DATA_GRID_EDITING.js';
+import type { SqlResultColumn } from '@cloudbeaver/core-sdk';
 
-@injectable()
+@injectable(() => [ActionService, LocalizationService, MenuService])
 export class DataGridContextMenuCellEditingService {
-  private static readonly menuEditingToken = 'menuEditing';
-
-  constructor(private readonly dataGridContextMenuService: DataGridContextMenuService) {}
-
-  getMenuEditingToken(): string {
-    return DataGridContextMenuCellEditingService.menuEditingToken;
-  }
+  constructor(
+    private readonly actionService: ActionService,
+    private readonly localizationService: LocalizationService,
+    private readonly menuService: MenuService,
+  ) {}
 
   register(): void {
-    this.dataGridContextMenuService.add(this.dataGridContextMenuService.getMenuToken(), {
-      id: this.getMenuEditingToken(),
-      order: 4,
-      title: 'data_grid_table_editing',
-      icon: 'edit',
-      isPanel: true,
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext;
+    this.menuService.addCreator({
+      root: true,
+      contexts: [DATA_CONTEXT_DV_DDM, DATA_CONTEXT_DV_DDM_RESULT_INDEX, DATA_CONTEXT_DV_RESULT_KEY],
+      isApplicable: context => {
+        const model = context.get(DATA_CONTEXT_DV_DDM)!;
+        const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
+        return isResultSetDataSource(model.source) && !model.isDisabled(resultIndex) && !model.isReadonly(resultIndex);
       },
-      isHidden(context) {
-        return context.data.model.isDisabled(context.data.resultIndex) || context.data.model.isReadonly(context.data.resultIndex);
-      },
+      getItems: (context, items) => [...items, MENU_DATA_GRID_EDITING],
     });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'open_inline_editor',
-      order: 0,
-      title: 'data_grid_table_editing_open_inline_editor',
-      icon: 'edit',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const format = source.getAction(context.data.resultIndex, ResultSetFormatAction);
-        const view = source.getAction(context.data.resultIndex, ResultSetViewAction);
-        const content = source.getAction(context.data.resultIndex, ResultSetDataContentAction);
-        const cellValue = view.getCellValue(context.data.key);
-        const column = view.getColumn(context.data.key.column);
-        const isComplex = format.isBinary(context.data.key) || format.isGeometry(context.data.key);
-        const isTruncated = content.isTextTruncated(context.data.key);
 
-        if (!column || cellValue === undefined || format.isReadOnly(context.data.key) || isComplex || isTruncated) {
-          return true;
+    this.menuService.addCreator({
+      menus: [MENU_DATA_GRID_EDITING],
+      getItems: (context, items) => [
+        ...items,
+        ACTION_EDIT,
+        ACTION_DATA_GRID_EDITING_SET_TO_NULL,
+        ACTION_DATA_GRID_EDITING_ADD_ROW,
+        ACTION_DATA_GRID_EDITING_DUPLICATE_ROW,
+        ACTION_DATA_GRID_EDITING_DELETE_ROW,
+        ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW,
+        ACTION_DATA_GRID_EDITING_REVERT_ROW,
+        ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW,
+      ],
+    });
+
+    this.actionService.addHandler({
+      id: 'data-grid-editing-base-handler',
+      menus: [MENU_DATA_GRID_EDITING],
+      isActionApplicable(context, action) {
+        const model = context.get(DATA_CONTEXT_DV_DDM)!;
+        const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
+        const key = context.get(DATA_CONTEXT_DV_RESULT_KEY)!;
+
+        const format = model.source.getAction(resultIndex, IDatabaseDataFormatAction);
+        const view = model.source.getAction(resultIndex, IDatabaseDataViewAction, GridViewAction);
+        const content = model.source.getAction(resultIndex, ResultSetDataContentAction);
+        const editor = model.source.getAction(resultIndex, IDatabaseDataEditAction);
+        const select = model.source.tryGetAction(resultIndex, IDatabaseDataSelectAction);
+
+        const cellHolder = view.getCellHolder(key);
+
+        // TODO: fix column abstraction
+        const column = view.getColumn(key.column) as SqlResultColumn | undefined;
+        const isComplex = format.isBinary(cellHolder) || format.isGeometry(cellHolder);
+        const isTruncated = content.isTextTruncated(cellHolder as IDatabaseValueHolder<IGridDataKey, IResultSetValue>);
+        const selectedElements = select?.getSelectedElements() || [];
+        // If we somehow added a new row, we can always edit it
+        const canEdit = editor.getElementState(key) === DatabaseEditChangeType.add;
+
+        if (model.isReadonly(resultIndex)) {
+          return false;
         }
 
-        return isBooleanValuePresentationAvailable(cellValue, column);
-      },
-      onClick(context) {
-        context.data.spreadsheetActions.edit(context.data.key);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'set_to_null',
-      order: 1,
-      title: 'data_grid_table_editing_set_to_null',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const { key, model, resultIndex } = context.data;
-        const source = model.source as unknown as ResultSetDataSource;
-        const view = source.getAction(resultIndex, ResultSetViewAction);
-        const format = source.getAction(resultIndex, ResultSetFormatAction);
-        const cellValue = view.getCellValue(key);
+        if (action === ACTION_EDIT) {
+          if (!column || cellHolder.value === undefined || (format.isReadOnly(key) && !canEdit) || isComplex || isTruncated) {
+            return false;
+          }
 
-        return cellValue === undefined || format.isReadOnly(context.data.key) || view.getColumn(key.column)?.required || format.isNull(key);
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        source.getAction(context.data.resultIndex, ResultSetEditAction).set(context.data.key, null);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_add',
-      order: 5,
-      icon: '/icons/data_add_sm.svg',
-      title: 'data_grid_table_editing_row_add',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        return !editor.hasFeature('add');
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        editor.addRow(context.data.key.row);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_add_copy',
-      order: 5.5,
-      icon: '/icons/data_add_copy_sm.svg',
-      title: 'data_grid_table_editing_row_add_copy',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        return !editor.hasFeature('add');
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        editor.duplicateRow(context.data.key);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_delete',
-      order: 6,
-      icon: '/icons/data_delete_sm.svg',
-      title: 'data_grid_table_editing_row_delete',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-
-        if (context.data.model.isReadonly(context.data.resultIndex) || !editor.hasFeature('delete')) {
-          return true;
+          return !isBooleanValuePresentationAvailable(cellHolder.value, column);
         }
 
-        const format = source.getAction(context.data.resultIndex, ResultSetFormatAction);
-        return format.isReadOnly(context.data.key) || editor.getElementState(context.data.key) === DatabaseEditChangeType.delete;
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        editor.deleteRow(context.data.key.row);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_delete_selected',
-      order: 6.1,
-      icon: '/icons/data_delete_sm.svg',
-      title: 'data_viewer_action_edit_delete',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-
-        if (context.data.model.isReadonly(context.data.resultIndex) || !editor.hasFeature('delete')) {
-          return true;
+        if (action === ACTION_DATA_GRID_EDITING_SET_TO_NULL) {
+          return cellHolder.value !== undefined && !(format.isReadOnly(key) && !canEdit) && !column?.required && !format.isNull(cellHolder);
         }
 
-        const select = source.getActionImplementation(context.data.resultIndex, ResultSetSelectAction);
+        if (action === ACTION_DATA_GRID_EDITING_ADD_ROW || action === ACTION_DATA_GRID_EDITING_DUPLICATE_ROW) {
+          return editor.hasFeature('add');
+        }
 
-        const selectedElements = select?.getSelectedElements() || [];
+        if (action === ACTION_DATA_GRID_EDITING_DELETE_ROW) {
+          return !(format.isReadOnly(key) && !canEdit) && editor.getElementState(key) !== DatabaseEditChangeType.delete;
+        }
 
-        return !selectedElements.some(key => editor.getElementState(key) !== DatabaseEditChangeType.delete);
+        if (action === ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW) {
+          if ((format.isReadOnly(key) && !canEdit) || !editor.hasFeature('delete')) {
+            return false;
+          }
+
+          return selectedElements.some(key => editor.getElementState(key) !== DatabaseEditChangeType.delete);
+        }
+
+        if (action === ACTION_DATA_GRID_EDITING_REVERT_ROW) {
+          return editor.getElementState(key) !== null;
+        }
+
+        if (action === ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW) {
+          return selectedElements.some(key => editor.getElementState(key) !== null);
+        }
+
+        return [
+          ACTION_EDIT,
+          ACTION_DATA_GRID_EDITING_SET_TO_NULL,
+          ACTION_DATA_GRID_EDITING_ADD_ROW,
+          ACTION_DATA_GRID_EDITING_DUPLICATE_ROW,
+          ACTION_DATA_GRID_EDITING_DELETE_ROW,
+          ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW,
+          ACTION_DATA_GRID_EDITING_REVERT_ROW,
+          ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW,
+        ].includes(action);
       },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        const select = source.getActionImplementation(context.data.resultIndex, ResultSetSelectAction);
+      getActionInfo: this.getActionInfo.bind(this),
+      handler(context, action) {
+        const model = context.get(DATA_CONTEXT_DV_DDM)!;
+        const resultIndex = context.get(DATA_CONTEXT_DV_DDM_RESULT_INDEX)!;
+        const actions = context.get(DATA_CONTEXT_DV_PRESENTATION_ACTIONS)!;
+        const key = context.get(DATA_CONTEXT_DV_RESULT_KEY)!;
+
+        const editor = model.source.getAction(resultIndex, IDatabaseDataEditAction, GridEditAction);
+        const select = model.source.tryGetAction(resultIndex, IDatabaseDataSelectAction, GridSelectAction);
 
         const selectedElements = select?.getSelectedElements() || [];
 
-        editor.delete(...selectedElements);
+        switch (action) {
+          case ACTION_EDIT:
+            actions.edit(key);
+            break;
+          case ACTION_DATA_GRID_EDITING_SET_TO_NULL:
+            editor.set(key, null);
+            break;
+          case ACTION_DATA_GRID_EDITING_ADD_ROW:
+            editor.addRow(key.row);
+            break;
+          case ACTION_DATA_GRID_EDITING_DUPLICATE_ROW:
+            editor.duplicateRow(key);
+            break;
+          case ACTION_DATA_GRID_EDITING_DELETE_ROW:
+            editor.deleteRow(key.row);
+            break;
+          case ACTION_DATA_GRID_EDITING_DELETE_SELECTED_ROW:
+            editor.delete(...selectedElements);
+            break;
+          case ACTION_DATA_GRID_EDITING_REVERT_ROW:
+            editor.revert(key);
+            break;
+          case ACTION_DATA_GRID_EDITING_REVERT_SELECTED_ROW:
+            editor.revert(...selectedElements);
+            break;
+        }
       },
     });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_revert',
-      order: 7,
-      icon: '/icons/data_revert_sm.svg',
-      title: 'data_grid_table_editing_row_revert',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        return editor.getElementState(context.data.key) === null;
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        editor.revert(context.data.key);
-      },
-    });
-    this.dataGridContextMenuService.add(this.getMenuEditingToken(), {
-      id: 'row_revert_selected',
-      order: 7.1,
-      icon: '/icons/data_revert_sm.svg',
-      title: 'data_viewer_action_edit_revert',
-      isPresent(context) {
-        return context.contextType === DataGridContextMenuService.cellContext && isResultSetDataSource(context.data.model.source);
-      },
-      isHidden(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        const select = source.getActionImplementation(context.data.resultIndex, ResultSetSelectAction);
+  }
 
-        const selectedElements = select?.getSelectedElements() || [];
-        return !selectedElements.some(key => editor.getElementState(key) !== null);
-      },
-      onClick(context) {
-        const source = context.data.model.source as unknown as ResultSetDataSource;
-        const editor = source.getAction(context.data.resultIndex, ResultSetEditAction);
-        const select = source.getActionImplementation(context.data.resultIndex, ResultSetSelectAction);
+  private getActionInfo(context: IDataContextProvider, action: IAction) {
+    const t = this.localizationService.translate;
+    if (action === ACTION_DATA_GRID_EDITING_ADD_ROW) {
+      return {
+        ...action.info,
+        label: 'data_grid_table_editing_row_add',
+        tooltip: t('data_grid_table_editing_row_add') + ' (' + getBindingLabel(KEY_BINDING_ADD) + ')',
+      };
+    }
+    if (action === ACTION_DATA_GRID_EDITING_DUPLICATE_ROW) {
+      return {
+        ...action.info,
+        label: 'data_grid_table_editing_row_add_copy',
+        tooltip: t('data_grid_table_editing_row_add_copy') + ' (' + getBindingLabel(KEY_BINDING_DUPLICATE) + ')',
+      };
+    }
 
-        const selectedElements = select?.getSelectedElements() || [];
-        editor.revert(...selectedElements);
-      },
-    });
+    if (action === ACTION_EDIT) {
+      return { ...action.info, label: t('data_grid_table_editing_open_inline_editor'), icon: 'edit' };
+    }
+
+    return action.info;
   }
 }

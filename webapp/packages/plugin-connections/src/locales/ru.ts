@@ -1,13 +1,7 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['plugin_connections_connection_form_part_main', 'Главное'],
   ['plugin_connections_connection_form_part_properties', 'Параметры драйвера'],
+  ['plugin_connections_connection_form_part_main_auth_model', 'Модель аутентификации'],
   ['plugin_connections_connection_form_part_main_custom_host', 'Хост'],
   ['plugin_connections_connection_form_part_main_custom_port', 'Порт'],
   ['plugin_connections_connection_form_part_main_custom_server_name', 'Имя сервера'],
@@ -33,10 +27,23 @@ export default [
   ['plugin_connections_menu_connections_label', 'Подключение'],
   ['plugin_connections_action_disconnect_all_label', 'Отключить все'],
   ['plugin_connections_settings', 'Подключения'],
-  ['plugin_connections_settings_hide_connections_view_name', 'Скрыть подключения'],
-  ['plugin_connections_settings_hide_connections_view_description', 'Подключения будут скрыты для всех пользователей, кроме администраторов'],
+  ['plugin_connections_settings_hide_connections_view_name', 'Скрыть управление отображением подключений'],
+  [
+    'plugin_connections_settings_hide_connections_view_description',
+    'Подменю выбора отображения подключения будет скрыто для всех пользователей, кроме администраторов',
+  ],
 
   ['plugin_connections_connection_ssl_enable', 'Включить SSL'],
+  ['plugin_connections_connection_ssl_optional', 'Все параметры SSL являются необязательными.'],
+  [
+    'plugin_connections_connection_ssl_description',
+    'Вы должны указать SSL сертификаты, если они требуются для конфигурации вашего сервера. Настройки на этой странице переопределяют свойства драйвера',
+  ],
+  [
+    'plugin_connections_connection_ssl_note',
+    '{arg:productName} не проверяет конфигурацию SSL и полагается на реализацию драйвера. Пожалуйста, обратитесь к документации драйвера для получения дополнительной информации.',
+  ],
+  ['plugin_connections_connection_ssl_docs', 'Документация по настройке SSL'],
 
   ['plugin_connections_connection_form_shared_credentials_manage_info', 'Вы можете указать учетные данные в '],
   ['plugin_connections_connection_form_shared_credentials_manage_info_tab_link', 'во вкладке "Учетные данные"'],
@@ -44,4 +51,10 @@ export default [
     'plugin_connections_connection_auth_secret_description',
     'У вас есть несколько учетных записей для авторизации.\nВыберите учетную запись из списка.',
   ],
+  ['plugin_connections_connection_create_menu_title', 'Новое Подключение'],
+  ['plugin_connections_connection_driver_not_installed_message', 'Драйвер не установлен. Вы можете установить его в "Администрированой" части.'],
+  ['plugin_connections_connection_established', 'Подключение установлено'],
+  ['plugin_connections_connection_client_version', 'Версия клиента: {arg:version} \n'],
+  ['plugin_connections_connection_server_version', 'Версия сервера: {arg:version} \n'],
+  ['plugin_connections_connection_connection_time', 'Время подключения: {arg:time} \n'],
 ];

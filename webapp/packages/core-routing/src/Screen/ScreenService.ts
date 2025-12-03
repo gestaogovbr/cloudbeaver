@@ -14,7 +14,7 @@ import { Executor, ExecutorInterrupter, type IExecutionContextProvider, type IEx
 import { RouterService, type RouterTransitionData } from '../RouterService.js';
 import type { IScreen, ScreenRoute } from './IScreen.js';
 
-@injectable()
+@injectable(() => [RouterService])
 export class ScreenService {
   get screen(): IScreen<any> | undefined {
     return this.getScreenByRoute(this.routerService.route);
@@ -31,6 +31,8 @@ export class ScreenService {
     this.routeScreenMap = new Map<string, string>();
     this.routerService.subscribe(this.onRouteChange.bind(this));
     this.routerService.transitionTask.addHandler(this.routeTransition.bind(this));
+
+    this.navigateToRoot = this.navigateToRoot.bind(this);
 
     makeObservable(this, {
       screen: computed,

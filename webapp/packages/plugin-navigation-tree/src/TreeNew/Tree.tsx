@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@ import { NodeSizeCacheContext } from './contexts/NodeSizeCacheContext.js';
 import { TreeContext } from './contexts/TreeContext.js';
 import { TreeDataContext } from './contexts/TreeDataContext.js';
 import { TreeDnDContext } from './contexts/TreeDnDContext.js';
+import { TreeSelectionContext } from './contexts/TreeSelectionContext.js';
 import { TreeVirtualizationContext } from './contexts/TreeVirtualizationContext.js';
 import type { INodeRenderer } from './INodeRenderer.js';
 import type { ITreeData } from './ITreeData.js';
@@ -21,12 +22,18 @@ import type { NodeEmptyPlaceholderComponent } from './NodeEmptyPlaceholderCompon
 import { useNodeSizeCache } from './useNodeSizeCache.js';
 import { useTree } from './useTree.js';
 import { useTreeDnD } from './useTreeDnD.js';
+import type { ITreeSelection } from './useTreeSelection.js';
 import { useTreeVirtualization } from './useTreeVirtualization.js';
+import { TreeMenuContextProvider } from './contexts/TreeMenuContext/TreeMenuContextProvider.js';
+import type { ITreeMenu } from './useTreeMenu.js';
 
 export interface NavigationTreeNewProps {
   data: ITreeData;
+  selection?: ITreeSelection;
+  menu?: ITreeMenu;
   nodeRenderers?: INodeRenderer[];
   emptyPlaceholder?: NodeEmptyPlaceholderComponent;
+  className?: string;
   onNodeClick?(id: string): void | Promise<void>;
   onNodeDoubleClick?(id: string): void | Promise<void>;
   getNodeDnDContext?(id: string, context: IDataContext): void;
@@ -35,8 +42,11 @@ export interface NavigationTreeNewProps {
 
 export const Tree = observer<NavigationTreeNewProps>(function Tree({
   data,
+  selection,
+  menu,
   nodeRenderers,
   emptyPlaceholder,
+  className,
   onNodeClick,
   onNodeDoubleClick,
   getNodeDnDContext,
@@ -56,16 +66,20 @@ export const Tree = observer<NavigationTreeNewProps>(function Tree({
   });
 
   return (
-    <div ref={mountOptimization.setRootRef} style={{ overflow: 'auto', position: 'relative' }}>
+    <div ref={mountOptimization.setRootRef} className={className} style={{ overflow: 'auto', position: 'relative' }}>
       <NodeSizeCacheContext.Provider value={elementsSizeCache}>
         <TreeDataContext.Provider value={data}>
-          <TreeVirtualizationContext.Provider value={mountOptimization}>
-            <TreeContext.Provider value={tree}>
-              <TreeDnDContext.Provider value={treeDnD}>
-                <NodeChildren nodeId={data.rootId} offsetHeight={0} emptyPlaceholder={emptyPlaceholder} root />
-              </TreeDnDContext.Provider>
-            </TreeContext.Provider>
-          </TreeVirtualizationContext.Provider>
+          <TreeSelectionContext.Provider value={selection}>
+            <TreeVirtualizationContext.Provider value={mountOptimization}>
+              <TreeContext.Provider value={tree}>
+                <TreeDnDContext.Provider value={treeDnD}>
+                  <TreeMenuContextProvider menu={menu ?? null}>
+                    <NodeChildren nodeId={data.rootId} offsetHeight={0} emptyPlaceholder={emptyPlaceholder} root />
+                  </TreeMenuContextProvider>
+                </TreeDnDContext.Provider>
+              </TreeContext.Provider>
+            </TreeVirtualizationContext.Provider>
+          </TreeSelectionContext.Provider>
         </TreeDataContext.Provider>
       </NodeSizeCacheContext.Provider>
     </div>

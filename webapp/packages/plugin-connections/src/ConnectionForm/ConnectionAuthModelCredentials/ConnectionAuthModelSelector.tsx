@@ -1,17 +1,17 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { observer } from 'mobx-react-lite';
 
-import { Combobox, usePermission, useResource } from '@cloudbeaver/core-blocks';
+import { Select, usePermission, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { DatabaseAuthModelsResource } from '@cloudbeaver/core-connections';
 import { CachedResourceListEmptyKey, resourceKeyList } from '@cloudbeaver/core-resource';
 import { EAdminPermission } from '@cloudbeaver/core-root';
-import { isNotNullDefined } from '@cloudbeaver/core-utils';
+import { isNotNullDefined } from '@dbeaver/js-helpers';
 
 interface Props {
   authModelCredentialsState: { authModelId?: string };
@@ -31,6 +31,7 @@ export const ConnectionAuthModelSelector = observer<Props>(function ConnectionAu
   disabled,
 }) {
   const adminPermission = usePermission(EAdminPermission.admin);
+  const t = useTranslate();
 
   const authModelsLoader = useResource(
     ConnectionAuthModelSelector,
@@ -45,16 +46,15 @@ export const ConnectionAuthModelSelector = observer<Props>(function ConnectionAu
   }
 
   return (
-    <Combobox
-      name="authModelId"
-      state={authModelCredentialsState}
+    <Select
+      value={authModelCredentialsState.authModelId}
       items={availableAuthModels}
       keySelector={model => model.id}
       valueSelector={model => model.displayName}
       titleSelector={model => model.description}
-      searchable={availableAuthModels.length > 10}
       readOnly={readonly || readonlyAuthModelId}
       disabled={disabled}
+      aria-label={t('plugin_connections_connection_form_part_main_auth_model')}
       tiny
       fill
       onSelect={onAuthModelChange}

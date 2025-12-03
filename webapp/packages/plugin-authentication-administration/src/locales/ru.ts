@@ -1,11 +1,5 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
+  ['authentication_administration_pages_label', 'Страницы'],
   ['authentication_administration_user_connections_user_add', 'Создание пользователя'],
   ['authentication_administration_user_connections_user_new', 'Новый пользователь'],
   ['authentication_administration_user_connections_access_load_fail', 'Не удалось загрузить доступные пользователю коннекшены'],
@@ -85,7 +79,7 @@ export default [
   ],
 
   ['administration_identity_providers_tab_title', 'Провайдеры идентификации'],
-  ['administration_identity_providers_provider', 'Провайдер'],
+  ['administration_identity_providers_provider', 'Тип провайдера'],
   ['administration_identity_providers_provider_id', 'Идентификатор'],
   ['administration_identity_providers_provider_configuration_name', 'Название конфигурации'],
   ['administration_identity_providers_provider_configuration_disabled', 'Отключена'],
@@ -153,4 +147,13 @@ export default [
 
   ['plugin_authentication_administration_team_form_edit_label', 'Форма редактирования команды'],
   ['plugin_authentication_administration_user_form_edit_label', 'Форма редактирования пользователя'],
+
+  [
+    'plugin_authentication_administration_user_username_validation_error',
+    'Имя пользователя не может содержать следующие символы / : " \\ \' <> | ? * и не может начинаться с точки',
+  ],
+  [
+    'plugin_authentication_administration_team_id_validation_error',
+    'ID команды не может содержать следующие символы / : " \\ \' <> | ? * и не может начинаться с точки',
+  ],
 ];

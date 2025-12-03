@@ -2,6 +2,8 @@
   "name": "@cloudbeaver/core-view",
   "type": "module",
   "sideEffects": [
+    "./lib/module.js",
+    "./lib/index.js",
     "src/**/*.css",
     "src/**/*.scss",
     "public/**/*"
@@ -9,29 +11,35 @@
   "version": "0.1.0",
   "description": "",
   "license": "Apache-2.0",
-  "main": "dist/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./module": "./lib/module.js"
+  },
   "scripts": {
     "build": "tsc -b",
-    "clean": "rimraf --glob dist",
+    "clean": "rimraf --glob lib",
     "lint": "eslint ./src/ --ext .ts,.tsx",
-    "validate-dependencies": "core-cli-validate-dependencies",
-    "update-ts-references": "yarn run clean && typescript-resolve-references"
+    "validate-dependencies": "core-cli-validate-dependencies"
   },
   "dependencies": {
-    "@cloudbeaver/core-blocks": "^0",
-    "@cloudbeaver/core-data-context": "^0",
-    "@cloudbeaver/core-di": "^0",
-    "@cloudbeaver/core-extensions": "^0",
-    "@cloudbeaver/core-localization": "^0",
-    "@cloudbeaver/core-utils": "^0",
+    "@cloudbeaver/core-blocks": "workspace:*",
+    "@cloudbeaver/core-data-context": "workspace:*",
+    "@cloudbeaver/core-di": "workspace:*",
+    "@cloudbeaver/core-extensions": "workspace:*",
+    "@cloudbeaver/core-localization": "workspace:*",
+    "@cloudbeaver/core-utils": "workspace:*",
+    "@dbeaver/js-helpers": "workspace:*",
     "mobx": "^6",
     "mobx-react-lite": "^4",
-    "react": "^18",
-    "react-hotkeys-hook": "^4"
+    "react": "^19",
+    "react-dom": "^19",
+    "tslib": "^2"
   },
-  "peerDependencies": {},
   "devDependencies": {
-    "@types/react": "^18",
+    "@cloudbeaver/core-cli": "workspace:*",
+    "@cloudbeaver/tsconfig": "workspace:*",
+    "@types/react": "^19",
+    "rimraf": "^6",
     "typescript": "^5",
     "typescript-plugin-css-modules": "^5"
   }

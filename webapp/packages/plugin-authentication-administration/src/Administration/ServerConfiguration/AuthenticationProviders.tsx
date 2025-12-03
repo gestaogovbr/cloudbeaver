@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,11 +8,17 @@
 import { observer } from 'mobx-react-lite';
 import React, { useContext } from 'react';
 
-import { AUTH_PROVIDER_LOCAL_ID, AuthProviderService, AuthProvidersResource, AuthSettingsService } from '@cloudbeaver/core-authentication';
+import {
+  AUTH_PROVIDER_LOCAL_ID,
+  AuthProviderService,
+  AuthProvidersResource,
+  AuthSettingsService,
+  sortProvider,
+} from '@cloudbeaver/core-authentication';
 import { FormContext, Group, GroupTitle, type PlaceholderComponent, Switch, useExecutor, useResource, useTranslate } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { CachedMapAllKey } from '@cloudbeaver/core-resource';
-import { isDefined } from '@cloudbeaver/core-utils';
+import { isDefined } from '@dbeaver/js-helpers';
 import type { IConfigurationPlaceholderProps } from '@cloudbeaver/plugin-administration';
 
 import { ServerConfigurationAdminForm } from './ServerConfigurationAdminForm.js';
@@ -32,21 +38,24 @@ export const AuthenticationProviders: PlaceholderComponent<IConfigurationPlaceho
   }
 
   const localProvider = providers.resource.get(AUTH_PROVIDER_LOCAL_ID);
-  const providerList = providers.data.filter(isDefined).filter(provider => {
-    if (provider.private) {
-      return false;
-    }
-
-    if (configurationWizard) {
-      const disabledByFeature = provider.requiredFeatures.some(feat => !serverConfig.enabledFeatures?.includes(feat));
-
-      if (provider.configurable || disabledByFeature) {
+  const providerList = providers.data
+    .filter(isDefined)
+    .filter(provider => {
+      if (provider.private) {
         return false;
       }
-    }
 
-    return true;
-  });
+      if (configurationWizard) {
+        const disabledByFeature = provider.requiredFeatures.some(feat => !serverConfig.enabledFeatures?.includes(feat));
+
+        if (provider.configurable || disabledByFeature || provider.authHidden) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .sort(sortProvider);
 
   const externalAuthentication = providerList.length === 0;
   const authenticationDisabled = serverConfig.enabledAuthProviders?.length === 0;
@@ -64,9 +73,8 @@ export const AuthenticationProviders: PlaceholderComponent<IConfigurationPlaceho
 
         if (serverConfig.enabledAuthProviders?.length) {
           serverConfig.enabledAuthProviders = serverConfig.enabledAuthProviders.filter(providerId => {
-            const provider = providers.resource.get(providerId)!;
-
-            return !provider.requiredFeatures.some(feat => !serverConfig.enabledFeatures?.includes(feat));
+            const provider = providers.resource.get(providerId);
+            return !provider?.requiredFeatures.some(feat => !serverConfig.enabledFeatures?.includes(feat));
           });
         }
       },

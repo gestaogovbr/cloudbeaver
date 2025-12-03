@@ -1,13 +1,12 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 import { makeObservable, observable, toJS } from 'mobx';
 
-import { Dependency } from '@cloudbeaver/core-di';
 import { isContainsException, isPrimitive, MetadataMap } from '@cloudbeaver/core-utils';
 
 import { CachedResourceParamKey } from './CachedResource.js';
@@ -23,14 +22,12 @@ import { ResourceMetadata } from './ResourceMetadata.js';
 import { ResourceUseTracker } from './ResourceUseTracker.js';
 
 export abstract class Resource<
-    TData,
-    TKey,
-    TInclude extends ReadonlyArray<string>,
-    TValue = TData,
-    TMetadata extends ICachedResourceMetadata = ICachedResourceMetadata,
-  >
-  extends Dependency
-  implements IResource<TData, TKey, TInclude, TValue, TMetadata>
+  TData,
+  TKey,
+  TInclude extends ReadonlyArray<string>,
+  TValue = TData,
+  TMetadata extends ICachedResourceMetadata = ICachedResourceMetadata,
+> implements IResource<TData, TKey, TInclude, TValue, TMetadata>
 {
   data: TData;
 
@@ -44,7 +41,6 @@ export abstract class Resource<
     protected readonly defaultValue: () => TData,
     protected defaultIncludes: TInclude = [] as any,
   ) {
-    super();
     this.isKeyEqual = this.isKeyEqual.bind(this);
     this.isIntersect = this.isIntersect.bind(this);
     this.isEqual = this.isEqual.bind(this);
@@ -100,8 +96,14 @@ export abstract class Resource<
       nextKey = this.aliases.transformToAlias(nextKey);
 
       return key.isEqual(nextKey);
-    } else if (isResourceAlias(key) || isResourceAlias(nextKey)) {
-      return true;
+    }
+
+    if (isResourceAlias(key)) {
+      key = this.aliases.transformToKey(key);
+    }
+
+    if (isResourceAlias(nextKey)) {
+      nextKey = this.aliases.transformToKey(nextKey);
     }
 
     if (isResourceKeyList(key) || isResourceKeyList(nextKey)) {

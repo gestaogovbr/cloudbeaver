@@ -16,19 +16,24 @@
  */
 package io.cloudbeaver.service.sql;
 
-import io.cloudbeaver.model.app.WebAppConfiguration;
+import io.cloudbeaver.model.WebAsyncTaskInfo;
+import io.cloudbeaver.model.app.ServletAppConfiguration;
+import io.cloudbeaver.model.session.WebAsyncTaskProcessor;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.registry.WebServiceRegistry;
 import io.cloudbeaver.utils.CBModelConstants;
-import io.cloudbeaver.utils.WebAppUtils;
+import io.cloudbeaver.utils.ServletAppUtils;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBPEvaluationContext;
 import org.jkiss.dbeaver.model.data.*;
 import org.jkiss.dbeaver.model.exec.DBCException;
 import org.jkiss.dbeaver.model.exec.DBCSession;
 import org.jkiss.dbeaver.model.gis.DBGeometry;
 import org.jkiss.dbeaver.model.gis.GisConstants;
 import org.jkiss.dbeaver.model.gis.GisTransformUtils;
+import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSAttributeBase;
 import org.jkiss.dbeaver.model.struct.DBSTypedObject;
 import org.jkiss.dbeaver.utils.ContentUtils;
@@ -36,9 +41,9 @@ import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.Base64;
 import org.jkiss.utils.CommonUtils;
 
-import java.io.ByteArrayOutputStream;
+import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -130,9 +135,9 @@ public class WebSQLUtils {
     private static Map<String, Object> serializeDocumentValue(WebSession session, DBDDocument document) throws DBCException {
         String documentData;
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            document.serializeDocument(session.getProgressMonitor(), baos, StandardCharsets.UTF_8);
-            documentData = new String(baos.toByteArray(), StandardCharsets.UTF_8);
+            StringWriter writer = new StringWriter();
+            document.serializeDocument(session.getProgressMonitor(), writer);
+            documentData = writer.toString();
         } catch (Exception e) {
             throw new DBCException("Error serializing document", e);
         }
@@ -151,7 +156,7 @@ public class WebSQLUtils {
         if (ContentUtils.isTextContent(value)) {
             String stringValue = ContentUtils.getContentStringValue(session.getProgressMonitor(), value);
             int textPreviewMaxLength = CommonUtils.toInt(
-                WebAppUtils.getWebApplication()
+                ServletAppUtils.getServletApplication()
                     .getAppConfiguration()
                     .getResourceQuota(WebSQLConstants.QUOTA_PROP_TEXT_PREVIEW_MAX_LENGTH),
                 WebSQLConstants.TEXT_PREVIEW_MAX_LENGTH
@@ -166,7 +171,7 @@ public class WebSQLUtils {
             if (binaryValue != null) {
                 byte[] previewValue = binaryValue;
                 // gets parameters from the configuration file
-                WebAppConfiguration config = WebAppUtils.getWebApplication().getAppConfiguration();
+                ServletAppConfiguration config = ServletAppUtils.getServletApplication().getAppConfiguration();
                 // the max length of the text preview
                 int textPreviewMaxLength = CommonUtils.toInt(
                     config.getResourceQuota(
@@ -215,7 +220,7 @@ public class WebSQLUtils {
      */
     public static Object serializeStringValue(Object value) {
         int textPreviewMaxLength = CommonUtils.toInt(
-            WebAppUtils.getWebApplication()
+            ServletAppUtils.getServletApplication()
                 .getAppConfiguration()
                 .getResourceQuota(WebSQLConstants.QUOTA_PROP_TEXT_PREVIEW_MAX_LENGTH),
             WebSQLConstants.TEXT_PREVIEW_MAX_LENGTH
@@ -254,5 +259,46 @@ public class WebSQLUtils {
             }
         }
         return value;
+    }
+
+    /**
+     * Returns fully qualified name for a column.
+     */
+    @NotNull
+    public static String getColumnName(@NotNull DBDAttributeBinding binding) {
+        return binding.getFullyQualifiedName(DBPEvaluationContext.UI);
+    }
+
+    @NotNull
+    public static WebAsyncTaskInfo createAsyncTaskExecuteSqlQuery(
+        @NotNull WebSession webSession,
+        @NotNull WebSQLContextInfo contextInfo,
+        @NotNull String sql,
+        @Nullable String resultId,
+        @Nullable WebSQLDataFilter filter,
+        @Nullable WebDataFormat dataFormat,
+        boolean readLogs,
+        boolean useEvents
+    ) {
+        final WebAsyncTaskInfo task = webSession.createAsyncTask("SQL execute");
+        WebAsyncTaskProcessor<String> runnable = new WebAsyncTaskProcessor<>() {
+            @Override
+            public void run(DBRProgressMonitor monitor) throws InvocationTargetException {
+                try {
+                    monitor.beginTask("Execute query", 1);
+                    monitor.subTask("Process query " + sql);
+                    WebSQLExecuteInfo executeResults = contextInfo.getProcessor().processQuery(
+                        monitor, contextInfo, sql, resultId, filter, dataFormat, webSession, task, readLogs, useEvents
+                    );
+                    this.result = executeResults.getStatusMessage();
+                    this.extendedResults = executeResults;
+                } catch (Throwable e) {
+                    throw new InvocationTargetException(e);
+                } finally {
+                    monitor.done();
+                }
+            }
+        };
+        return webSession.runAsyncTask(task, runnable);
     }
 }

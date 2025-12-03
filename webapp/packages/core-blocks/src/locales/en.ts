@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['core_block_properties_table_name', 'Name'],
   ['core_block_properties_table_value', 'Value'],
@@ -16,7 +9,11 @@ export default [
   ['core_blocks_object_property_info_password_saved', 'Field value is saved'],
   ['core_blocks_properties_table_item_remove', 'Remove property'],
   ['combobox_no_results_placeholder', 'No results'],
+  ['combobox_select_placeholder', 'Select an option'],
   ['core_blocks_exception_message_error_title', 'Unable to display content'],
   ['core_blocks_exception_message_error_message', 'Something went wrong.'],
   ['core_blocks_custom_input_validation_error', 'Field value is not valid'],
+  ['core_blocks_export_image_dialog_title', 'Export as Image'],
+  ['core_blocks_export_image_dialog_format', 'File Format'],
+  ['core_blocks_export_image_dialog_transparent_background', 'Transparent background'],
 ];

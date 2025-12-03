@@ -21,6 +21,7 @@ import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeBinding;
+import org.jkiss.dbeaver.model.data.DBDDataFilter;
 import org.jkiss.dbeaver.model.data.DBDRowIdentifier;
 import org.jkiss.dbeaver.model.exec.trace.DBCTrace;
 import org.jkiss.dbeaver.model.struct.*;
@@ -39,7 +40,11 @@ public class WebSQLResultsInfo {
     @NotNull
     private final String id;
     private DBDAttributeBinding[] attributes;
+    // TODO: find a way to remove isSingleRow and use virtual keys for reading BLOB and string cell values.
+    private boolean isSingleRow;
     private DBCTrace trace;
+    @Nullable
+    private DBDDataFilter dataFilter;
     private String queryText;
 
     public WebSQLResultsInfo(@NotNull DBSDataContainer dataContainer, @NotNull String id) {
@@ -140,5 +145,22 @@ public class WebSQLResultsInfo {
 
     public void setTrace(@NotNull DBCTrace trace) {
         this.trace = trace;
+    }
+
+    public boolean isSingleRow() {
+        return isSingleRow;
+    }
+
+    public void setSingleRow(boolean singleRow) {
+        isSingleRow = singleRow;
+    }
+
+    @Nullable
+    public DBDDataFilter getDataFilter() {
+        return dataFilter;
+    }
+
+    public void setDataFilter(@Nullable DBDDataFilter dataFilter) {
+        this.dataFilter = dataFilter;
     }
 }

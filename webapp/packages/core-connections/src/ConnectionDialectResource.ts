@@ -22,11 +22,11 @@ import {
 
 export type ConnectionDialect = SqlDialectInfo;
 
-@injectable()
+@injectable(() => [GraphQLService, ProjectsService, ConnectionInfoResource])
 export class ConnectionDialectResource extends CachedMapResource<IConnectionInfoParams, ConnectionDialect> {
   constructor(
     private readonly graphQLService: GraphQLService,
-    private readonly projectsService: ProjectsService,
+    projectsService: ProjectsService,
     connectionInfoResource: ConnectionInfoResource,
   ) {
     super();

@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ import {
 import {
   Button,
   Cell,
-  Clickable,
   Container,
   Filter,
   getComputed,
@@ -34,7 +33,6 @@ import {
 import { useService } from '@cloudbeaver/core-di';
 import type { ITask } from '@cloudbeaver/core-executor';
 import type { UserInfo } from '@cloudbeaver/core-sdk';
-import { ServerConfigurationAdministrationNavService } from '@cloudbeaver/plugin-administration';
 
 import { AuthenticationService } from '../../AuthenticationService.js';
 import styles from './ConfigurationsList.module.css';
@@ -63,7 +61,6 @@ export const ConfigurationsList = observer<Props>(function ConfigurationsList({
   onClose,
   className,
 }) {
-  const serverConfigurationAdministrationNavService = useService(ServerConfigurationAdministrationNavService);
   const authenticationService = useService(AuthenticationService);
   const translate = useTranslate();
   const style = useS(styles);
@@ -93,11 +90,6 @@ export const ConfigurationsList = observer<Props>(function ConfigurationsList({
     return target.toUpperCase().includes(search.toUpperCase());
   });
 
-  function navToSettings() {
-    onClose?.();
-    serverConfigurationAdministrationNavService.navToSettings();
-  }
-
   function navToIdentityProvidersSettings() {
     onClose?.();
     authenticationService.configureIdentityProvider?.();
@@ -118,12 +110,9 @@ export const ConfigurationsList = observer<Props>(function ConfigurationsList({
         <Loader state={authTaskState} message="authentication_authorizing" hideException>
           <Container keepSize center>
             {providerDisabled ? (
-              <TextPlaceholder>
-                {translate('plugin_authentication_authentication_method_disabled')}
-                {authenticationService.configureIdentityProvider && <Link onClick={navToSettings}>{translate('ui_configure')}</Link>}
-              </TextPlaceholder>
+              <TextPlaceholder>{translate('plugin_authentication_authentication_method_disabled')}</TextPlaceholder>
             ) : (
-              <Button type="button" mod={['unelevated']} onClick={() => login(false, activeProvider, activeConfiguration)}>
+              <Button type="button" onClick={() => login(false, activeProvider, activeConfiguration)}>
                 <Translate token="authentication_login" />
               </Button>
             )}
@@ -150,17 +139,16 @@ export const ConfigurationsList = observer<Props>(function ConfigurationsList({
           const icon = configuration.iconURL || provider.icon;
           const title = `${configuration.displayName}\n${configuration.description || ''}`;
           return (
-            <Link key={configuration.id} title={title} wrapper onClick={() => login(false, provider, configuration)}>
-              <Clickable as="div">
-                <Cell
-                  className={s(style, { cell: true })}
-                  before={icon ? <IconOrImage className={s(style, { iconOrImage: true })} icon={icon} /> : undefined}
-                  description={configuration.description}
-                >
-                  {configuration.displayName}
-                </Cell>
-              </Clickable>
-            </Link>
+            <Cell
+              key={configuration.id}
+              title={title}
+              className={s(style, { cell: true }, 'tw:cursor-pointer')}
+              before={icon ? <IconOrImage className={s(style, { iconOrImage: true })} icon={icon} /> : undefined}
+              description={configuration.description}
+              onClick={() => login(false, provider, configuration)}
+            >
+              {configuration.displayName}
+            </Cell>
           );
         })}
       </Container>

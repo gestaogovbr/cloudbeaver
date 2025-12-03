@@ -1,6 +1,6 @@
 /*
  * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
+ * Copyright (C) 2020-2025 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -69,9 +69,6 @@ export abstract class CachedResource<
   protected outdateWaitList: ResourceKey<TKey>[];
   protected readonly scheduler: TaskScheduler<ResourceKey<TKey>>;
 
-  /** Need to infer value type */
-  private readonly typescriptHack: TValue;
-
   constructor(defaultKey: ResourceKey<TKey>, defaultValue: () => TData, defaultIncludes: TInclude = [] as any) {
     super(defaultValue, defaultIncludes);
 
@@ -79,7 +76,6 @@ export abstract class CachedResource<
 
     this.loadingTask = this.loadingTask.bind(this);
 
-    this.typescriptHack = null as any;
     this.outdateWaitList = [];
     this.scheduler = new TaskScheduler(this.isIntersect);
     this.beforeLoad = new Executor(null, this.isIntersect);
@@ -340,9 +336,14 @@ export abstract class CachedResource<
     return this.scheduler.wait();
   }
 
+  // TODO: this method repeats isLoaded checks, maybe we can call just `this.isLoaded`
   isOutdated(param?: ResourceKey<TKey>, includes?: TInclude): boolean {
     if (param === undefined) {
       param = CachedResourceParamKey;
+    }
+
+    if (!this.metadata.has(param)) {
+      return true;
     }
 
     const pageKey = this.aliases.isAlias(param, CachedResourceOffsetPageKey) || this.aliases.isAlias(param, CachedResourceOffsetPageListKey);
@@ -350,14 +351,18 @@ export abstract class CachedResource<
     if (pageKey) {
       const pageInfo = this.offsetPagination.getPageInfo(pageKey);
 
-      if (isOffsetPageOutdated(pageInfo?.pages || [], pageKey.options)) {
+      if (!pageInfo || !isOffsetPageInRange(pageInfo, pageKey.options) || isOffsetPageOutdated(pageInfo.pages, pageKey.options)) {
         return true;
       }
     }
 
     return this.metadata.some(
       param,
-      metadata => !metadata.loaded || metadata.outdated || !!includes?.some(include => metadata.outdatedIncludes.includes(include)),
+      metadata =>
+        !metadata.loaded ||
+        metadata.outdated ||
+        !!includes?.some(include => metadata.outdatedIncludes.includes(include)) ||
+        !(!includes || includes.every(include => metadata.includes.includes(include))),
     );
   }
 
@@ -389,7 +394,7 @@ export abstract class CachedResource<
   }
 
   markError(exception: Error, key: ResourceKey<TKey>, include?: TInclude): ResourceError {
-    exception = new ResourceError(this, key, include, exception.message, { cause: exception });
+    exception = new ResourceError(this, key, exception.message, { cause: exception });
     const pageKey = this.aliases.isAlias(key, CachedResourceOffsetPageKey) || this.aliases.isAlias(key, CachedResourceOffsetPageListKey);
     this.metadata.update(key, metadata => {
       metadata.exception = exception;
@@ -629,7 +634,7 @@ export abstract class CachedResource<
     context?: TInclude,
   ): Promise<void> {}
 
-  protected abstract loader(param: ResourceKey<TKey>, include: ReadonlyArray<string> | undefined, refresh: boolean): Promise<TData>;
+  protected abstract loader(param: ResourceKey<TKey>, include: ReadonlyArray<string> | undefined, refresh: boolean): TData | Promise<TData>;
 
   /**
    * Implements same behavior as {@link CachedResource.load} and {@link CachedResource.refresh} for custom loaders.
@@ -788,7 +793,7 @@ export abstract class CachedResource<
             this.markOutdatedSync(key);
           }
         },
-        success: async () => {
+        success: () => {
           if (loaded) {
             this.dataUpdate(key);
           }

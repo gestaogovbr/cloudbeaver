@@ -1,10 +1,3 @@
-/*
- * CloudBeaver - Cloud Database Manager
- * Copyright (C) 2020-2024 DBeaver Corp and others
- *
- * Licensed under the Apache License, Version 2.0.
- * you may not use this file except in compliance with the License.
- */
 export default [
   ['data_grid_table_empty_placeholder', 'The table does not contain any columns'],
   ['data_grid_table_editing', 'Edit'],
@@ -20,6 +13,7 @@ export default [
   ['data_grid_table_filter_cell_value', 'Cell value'],
   ['data_grid_table_filter_custom_value', 'Custom'],
   ['data_grid_table_filter_reset_all_filters', 'Reset all filters'],
+  ['data_grid_table_filter_delete_for_column', 'Delete filter for "{arg:column}"'],
   ['data_grid_table_disable_order', 'Disabled'],
   ['data_grid_table_disable_all_orders', 'Disable all'],
   ['data_grid_table_delete_filters_and_orders', 'Reset filters / sorting'],
@@ -31,4 +25,6 @@ export default [
   ['data_grid_table_readonly_tooltip', 'Read-only'],
   ['plugin_data_spreadsheet_new_settings_disable', 'Disable Table presentation'],
   ['plugin_data_spreadsheet_new_settings_disable_description', 'Disable table presentation of data for all users'],
+  ['plugin_data_spreadsheet_new_settings_description_label', 'Show columns description'],
+  ['plugin_data_spreadsheet_new_settings_description_label_description', 'Description will be shown under the column names in the table header'],
 ];
