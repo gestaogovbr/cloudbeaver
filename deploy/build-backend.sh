@@ -11,7 +11,7 @@ mkdir ./cloudbeaver/workspace
 echo "Pull cloudbeaver platform"
 cd ../..
 echo "Pull dbeaver platform"
-[ ! -d dbeaver ] && git clone --depth 1 https://github.com/gestaogovbr/dbeaver.git
+[ ! -d dbeaver ] && git clone --depth 1 --branch devel https://github.com/gestaogovbr/dbeaver.git
 [ ! -d dbeaver-common ] && git clone --depth 1 --branch devel https://github.com/dbeaver/dbeaver-common.git
 [ ! -d dbeaver-jdbc-libsql ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
 cd cloudbeaver/deploy
