@@ -28,5 +28,11 @@ cp -p ./scripts/* ./cloudbeaver
 mkdir cloudbeaver/samples
 cp -rp  ../config/core/* cloudbeaver/conf
 cp -rp ../config/GlobalConfiguration/.dbeaver/data-sources.json cloudbeaver/conf/initial-data-sources.conf
+
+# Copy drivers from source to cloudbeaver
+echo "Copy drivers to cloudbeaver"
+mkdir -p ./cloudbeaver/server/drivers
+cp -rp ../server/drivers/* ./cloudbeaver/server/drivers/
+
 mv drivers cloudbeaver
 echo "End of backend build"
