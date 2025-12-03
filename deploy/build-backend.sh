@@ -18,6 +18,10 @@ cd ../..
 echo "Pull dbeaver platform"
 [ ! -d dbeaver ] && git clone --depth 1 https://github.com/gestaogovbr/dbeaver.git
 [ ! -d dbeaver-common ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-common.git
+# Fix P2 repository URL
+cd ../../dbeaver-common
+sed -i "s|https://p2.dev.dbeaver.com/eclipse-repo/.*|https://repo.dbeaver.net/p2/ce/24.3.1|g" root/pom.xml
+cd cloudbeaver/deploy
 [ ! -d dbeaver-jdbc-libsql ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
 
 
