@@ -15,10 +15,13 @@ echo "Pull dbeaver platform"
 [ ! -d dbeaver-common ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-common.git
 [ ! -d dbeaver-jdbc-libsql ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
 
-# Fix P2 repository URL
+# Fix P2 repository URL and version
 if [ -d dbeaver-common ]; then
     cd dbeaver-common
-    sed -i "s|https://p2.dev.dbeaver.com/eclipse-repo/.*|https://repo.dbeaver.net/p2/ce/24.3.1|g" root/pom.xml
+    # Fix repository URL
+    sed -i 's|https://p2.dev.dbeaver.com/eclipse-repo/.*|https://repo.dbeaver.net/p2/ce/24.3.1|g' root/pom.xml
+    # Fix dbeaver-version variable
+    sed -i 's|<dbeaver-version>.*</dbeaver-version>|<dbeaver-version>24.3.1</dbeaver-version>|g' root/pom.xml
     cd ..
 fi
 
