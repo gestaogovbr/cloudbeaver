@@ -16,16 +16,7 @@ echo "Pull cloudbeaver platform"
 cd ../..
 
 echo "Pull dbeaver platform"
-if [ ! -d dbeaver ]; then
-    git clone --depth 1 --branch devel https://github.com/gestaogovbr/dbeaver.git
-else
-    cd dbeaver
-    git fetch origin devel
-    git checkout devel
-    git pull origin devel
-    cd ..
-fi
-
+[ ! -d dbeaver ] && git clone --depth 1 --branch devel https://github.com/gestaogovbr/dbeaver.git
 [ ! -d dbeaver-common ] && git clone --depth 1 --branch devel https://github.com/dbeaver/dbeaver-common.git
 [ ! -d dbeaver-jdbc-libsql ] && git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
 
