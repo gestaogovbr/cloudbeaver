@@ -21,7 +21,7 @@ rm -rf dbeaver
 rm -rf dbeaver-common
 rm -rf dbeaver-jdbc-libsql
 
-git clone --depth 1 --branch devel-stable https://github.com/gestaogovbr/dbeaver.git
+git clone --depth 1 --branch devel https://github.com/gestaogovbr/dbeaver.git
 git clone --depth 1 --branch devel https://github.com/dbeaver/dbeaver-common.git
 git clone --depth 1 https://github.com/dbeaver/dbeaver-jdbc-libsql.git
 
