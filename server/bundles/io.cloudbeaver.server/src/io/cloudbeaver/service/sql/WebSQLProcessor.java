@@ -1305,17 +1305,17 @@ public class WebSQLProcessor implements WebSessionProvider {
                         );
                         break;
                     }
-                    if (false) // DISABLED: confirmDropQueries && sqlQuery.isDropDangerous() {
-                        hasDropStatement = true;
-                        ConfirmationDescriptor descriptor = ConfirmationRegistry.getInstance()
-                            .getConfirmation(ConfirmationConstants.CONFIRM_DROP_SQL_ID);
-                        title = descriptor.getLocalizedTitle(webSession.getLocale());
-                        message = MessageFormat.format(
-                            descriptor.getLocalizedMessage(webSession.getLocale()),
-                            sqlQuery.getText()
-                        );
-                        break;
-                    }
+//                     if (confirmDropQueries && sqlQuery.isDropDangerous()) {
+//                         hasDropStatement = true;
+//                         ConfirmationDescriptor descriptor = ConfirmationRegistry.getInstance()
+//                             .getConfirmation(ConfirmationConstants.CONFIRM_DROP_SQL_ID);
+//                         title = descriptor.getLocalizedTitle(webSession.getLocale());
+//                         message = MessageFormat.format(
+//                             descriptor.getLocalizedMessage(webSession.getLocale()),
+//                             sqlQuery.getText()
+//                         );
+//                         break;
+//                     }
                 }
             }
         }
