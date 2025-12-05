@@ -44,11 +44,24 @@ cp -rp ../server/product/web-server/target/products/io.cloudbeaver.product/all/a
 cp -p ./scripts/* ./cloudbeaver
 
 mkdir cloudbeaver/samples
+
+# Debug: Show what Maven generated
+echo "DEBUG: Files in cloudbeaver before custom config copy:"
+ls -la ./cloudbeaver/
+ls -la ./cloudbeaver/conf/ || echo "No conf dir yet"
+
 # Remove Maven-generated config to ensure our custom config is used
 rm -f ./cloudbeaver/conf/cloudbeaver.conf
 
+echo "DEBUG: Copying custom configs from ../config/core/"
+ls -la ../config/core/
 
 cp -rpf ../config/core/* cloudbeaver/conf
+
+echo "DEBUG: Files in cloudbeaver/conf after custom config copy:"
+ls -la ./cloudbeaver/conf/
+cat ./cloudbeaver/conf/cloudbeaver.conf | grep enabledDrivers || echo "enabledDrivers NOT FOUND!"
+
 cp -rp ../config/GlobalConfiguration/.dbeaver/data-sources.json cloudbeaver/conf/initial-data-sources.conf
 
 # Copy drivers from source to cloudbeaver
