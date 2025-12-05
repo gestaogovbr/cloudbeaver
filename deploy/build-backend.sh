@@ -45,7 +45,7 @@ cp -p ./scripts/* ./cloudbeaver
 
 mkdir cloudbeaver/samples
 
-cp -rp  ../config/core/* cloudbeaver/conf
+cp -rpf ../config/core/* cloudbeaver/conf
 cp -rp ../config/GlobalConfiguration/.dbeaver/data-sources.json cloudbeaver/conf/initial-data-sources.conf
 
 # Copy drivers from source to cloudbeaver
