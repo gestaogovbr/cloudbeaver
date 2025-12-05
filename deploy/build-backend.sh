@@ -44,6 +44,9 @@ cp -rp ../server/product/web-server/target/products/io.cloudbeaver.product/all/a
 cp -p ./scripts/* ./cloudbeaver
 
 mkdir cloudbeaver/samples
+# Remove Maven-generated config to ensure our custom config is used
+rm -f ./cloudbeaver/conf/cloudbeaver.conf
+
 
 cp -rpf ../config/core/* cloudbeaver/conf
 cp -rp ../config/GlobalConfiguration/.dbeaver/data-sources.json cloudbeaver/conf/initial-data-sources.conf
