@@ -66,7 +66,7 @@
         <driver id="generic:duckdb_jdbc"/>
         <driver id="generic:kyuubi_hive"/>
         <driver id="generic:teiid"/>
-        <driver id="cloudera_impala"/>
+        <driver id="generic:cloudera_impala"/>
         <driver id="databend:databend"/>
     </extension>
 
